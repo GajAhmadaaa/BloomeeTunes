@@ -40,6 +40,7 @@ class SettingsState extends Equatable {
 
   /// Stream-cache size cap in megabytes, as a string ("0" = unlimited).
   final String streamCacheCapMB;
+  final String streamCacheMaxFileMB;
 
   const SettingsState({
     required this.settingsReady,
@@ -72,6 +73,7 @@ class SettingsState extends Equatable {
     required this.suggestionPluginId,
     required this.streamCacheEnabled,
     required this.streamCacheCapMB,
+    required this.streamCacheMaxFileMB,
   });
 
   SettingsState copyWith({
@@ -105,6 +107,7 @@ class SettingsState extends Equatable {
     String? suggestionPluginId,
     bool? streamCacheEnabled,
     String? streamCacheCapMB,
+    String? streamCacheMaxFileMB,
   }) {
     return SettingsState(
       settingsReady: settingsReady ?? this.settingsReady,
@@ -144,6 +147,7 @@ class SettingsState extends Equatable {
       suggestionPluginId: suggestionPluginId ?? this.suggestionPluginId,
       streamCacheEnabled: streamCacheEnabled ?? this.streamCacheEnabled,
       streamCacheCapMB: streamCacheCapMB ?? this.streamCacheCapMB,
+      streamCacheMaxFileMB: streamCacheMaxFileMB ?? this.streamCacheMaxFileMB,
     );
   }
 
@@ -179,6 +183,7 @@ class SettingsState extends Equatable {
         suggestionPluginId,
         streamCacheEnabled,
         streamCacheCapMB,
+        streamCacheMaxFileMB,
       ];
 }
 
@@ -215,5 +220,6 @@ class SettingsInitial extends SettingsState {
           suggestionPluginId: '',
           streamCacheEnabled: true,
           streamCacheCapMB: '2048',
+          streamCacheMaxFileMB: '256',
         );
 }

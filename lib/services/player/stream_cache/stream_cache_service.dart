@@ -45,6 +45,11 @@ class StreamCacheService {
   /// 0 means unlimited.
   int _maxBytes = 2 * 1024 * 1024 * 1024;
 
+  /// Per-file guard: a single cached song may never exceed this many bytes,
+  /// no matter what the server declares or sends. 0 means no guard.
+  /// (A 3-minute song is a few MB; 256 MB already covers hour-long mixes.)
+  int _maxFileBytes = 256 * 1024 * 1024;
+
   bool get isRunning => _server != null;
   int get port => _server?.port ?? -1;
 
@@ -61,6 +66,11 @@ class StreamCacheService {
     _maxBytes = bytes < 0 ? 0 : bytes;
     // Enforce lazily — never block the UI thread on I/O here.
     unawaited(_enforceCap().catchError((_) {}));
+  }
+
+  /// Sets the per-file size guard. 0 (or negative) disables the guard.
+  void setMaxFileBytes(int bytes) {
+    _maxFileBytes = bytes < 0 ? 0 : bytes;
   }
 
   Future<void> start({required String cacheDir}) async {
@@ -520,11 +530,33 @@ class StreamCacheService {
         'host=${upstream.host} declaredLen=$upstreamLength '
         'playerRange=${req.headers.value(HttpHeaders.rangeHeader) ?? '-'}'));
     var bytes = 0;
+    var guardTripped = false;
     try {
       await for (final chunk in upRes) {
         bytes += chunk.length;
         res.add(chunk);
-        sink?.add(chunk);
+        // Per-file guard: never trust the server's declared size — enforce
+        // our own cap on the ACTUAL bytes written. If tripped, stop writing
+        // to disk (delete the partial) but keep serving the player, so
+        // playback is unaffected; the song just won't be cached.
+        if (!guardTripped &&
+            _maxFileBytes > 0 &&
+            bytes > _maxFileBytes) {
+          guardTripped = true;
+          try {
+            await sink?.close();
+          } catch (_) {}
+          sink = null;
+          try {
+            if (await tmp.exists()) await tmp.delete();
+          } catch (_) {}
+          unawaited(_debugLog('GUARDTRIPPED key=$key bytes=$bytes '
+              'cap=$_maxFileBytes title="${entry.title}"'));
+          log('Cache guard tripped for "${entry.title}" at ${_fmtBytes(bytes)} '
+              '(cap ${_fmtBytes(_maxFileBytes)}) — serving uncached',
+              name: 'StreamCache');
+        }
+        if (!guardTripped) sink?.add(chunk);
       }
       try {
         await res.close();
@@ -533,7 +565,7 @@ class StreamCacheService {
         await sink?.flush();
         await sink?.close();
       } catch (_) {}
-      if (bytes > 0) {
+      if (bytes > 0 && !guardTripped) {
         await _promotePart(key, entry, dir, bytes,
             contentType ?? entry.contentType ?? 'audio/mpeg');
         unawaited(_debugLog('TEEEND key=$key bytes=$bytes '
@@ -546,7 +578,7 @@ class StreamCacheService {
       } catch (_) {}
       unawaited(_debugLog('TEEEND key=$key bytes=$bytes '
           'declared=$upstreamLength elapsedMs=${teeWatch.elapsedMilliseconds} '
-          'result=empty'));
+          'result=${guardTripped ? 'guard-tripped' : 'empty'}'));
       return false;
     } catch (e) {
       // Player went away mid-stream: keep the partial file; the remainder
@@ -650,6 +682,21 @@ class StreamCacheService {
       try {
         await for (final chunk in upRes) {
           bytes += chunk.length;
+          if (_maxFileBytes > 0 && bytes > _maxFileBytes) {
+            // Per-file guard tripped during resume: give up, delete partial.
+            try {
+              await sink.close();
+            } catch (_) {}
+            try {
+              if (await part.exists()) await part.delete();
+            } catch (_) {}
+            unawaited(_debugLog('GUARDTRIPPED key=$key bytes=$bytes '
+                'cap=$_maxFileBytes title="${entry.title}" (resume)'));
+            log('Cache guard tripped for "${entry.title}" during resume at '
+                '${_fmtBytes(bytes)} — partial deleted',
+                name: 'StreamCache');
+            return;
+          }
           sink.add(chunk);
         }
         await sink.flush();
