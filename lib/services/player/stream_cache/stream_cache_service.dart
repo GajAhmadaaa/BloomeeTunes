@@ -900,8 +900,7 @@ class StreamCacheService {
   }
 
   static String _fmtBytes(int bytes) {
-    if (bytes < 1024) return '$bytes B';
-    const units = ['KB', 'MB', 'GB'];
+    const units = ['B', 'KB', 'MB', 'GB'];
     var v = bytes.toDouble();
     var u = 0;
     while (v >= 1024 && u < units.length - 1) {
