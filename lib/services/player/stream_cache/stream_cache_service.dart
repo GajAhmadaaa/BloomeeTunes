@@ -196,6 +196,48 @@ class StreamCacheService {
     return out;
   }
 
+  // ─── Debug log (forensics) ──────────────────────────────────────────
+  // Timestamped diagnostics written to cache-debug.log in the cache dir.
+  // Answers "how did a 3-minute song become 3 GB": every tee/resume/
+  // promote/enforce is logged with byte counts and timings, so a future
+  // incident shows whether bytes arrived slowly from the network or
+  // appeared instantly (local bug).
+
+  File? get _debugLogFile =>
+      _dir == null ? null : File('${_dir!.path}/cache-debug.log');
+  static const _maxDebugLogBytes = 200 * 1024;
+
+  Future<void> _debugLog(String msg) async {
+    final f = _debugLogFile;
+    if (f == null) return;
+    try {
+      if (await f.exists() && await f.length() > _maxDebugLogBytes) {
+        final bytes = await f.readAsBytes();
+        await f.writeAsBytes(bytes.sublist(bytes.length ~/ 2), flush: true);
+      }
+      await f.writeAsString('${DateTime.now().toIso8601String()} $msg\n',
+          mode: FileMode.append, flush: true);
+    } catch (_) {}
+  }
+
+  /// Reads the debug log (newest last). Empty string when nothing logged yet.
+  Future<String> readDebugLog() async {
+    try {
+      final f = _debugLogFile;
+      if (f == null || !await f.exists()) return '';
+      return await f.readAsString();
+    } catch (_) {
+      return '';
+    }
+  }
+
+  Future<void> clearDebugLog() async {
+    try {
+      final f = _debugLogFile;
+      if (f != null && await f.exists()) await f.delete();
+    } catch (_) {}
+  }
+
   /// Deletes every cached song. Registrations are kept — the next play of a
   /// cleared song simply re-fetches it from upstream.
   Future<void> clear() async {
@@ -325,6 +367,8 @@ class StreamCacheService {
         fromStart = int.parse(m.group(1)!) == 0 && m.group(2)!.isEmpty;
       }
     }
+    unawaited(_debugLog(
+        'REQ key=$key range=${rangeHeader ?? '-'} fromStart=$fromStart'));
 
     if (_busyKeys.contains(key)) {
       // Another fetch for this track is already writing the cache file.
@@ -471,6 +515,10 @@ class StreamCacheService {
     } catch (_) {
       sink = null;
     }
+    final teeWatch = Stopwatch()..start();
+    unawaited(_debugLog('TEESTART key=$key title="${entry.title}" '
+        'host=${upstream.host} declaredLen=$upstreamLength '
+        'playerRange=${req.headers.value(HttpHeaders.rangeHeader) ?? '-'}'));
     var bytes = 0;
     try {
       await for (final chunk in upRes) {
@@ -488,11 +536,17 @@ class StreamCacheService {
       if (bytes > 0) {
         await _promotePart(key, entry, dir, bytes,
             contentType ?? entry.contentType ?? 'audio/mpeg');
+        unawaited(_debugLog('TEEEND key=$key bytes=$bytes '
+            'declared=$upstreamLength elapsedMs=${teeWatch.elapsedMilliseconds} '
+            'result=promoted'));
         return true;
       }
       try {
         if (await tmp.exists()) await tmp.delete();
       } catch (_) {}
+      unawaited(_debugLog('TEEEND key=$key bytes=$bytes '
+          'declared=$upstreamLength elapsedMs=${teeWatch.elapsedMilliseconds} '
+          'result=empty'));
       return false;
     } catch (e) {
       // Player went away mid-stream: keep the partial file; the remainder
@@ -503,6 +557,9 @@ class StreamCacheService {
       try {
         await res.close();
       } catch (_) {}
+      unawaited(_debugLog('TEEEND key=$key bytes=$bytes '
+          'declared=$upstreamLength elapsedMs=${teeWatch.elapsedMilliseconds} '
+          'result=interrupted err=$e'));
       log('Tee interrupted for "${entry.title}" after ${_fmtBytes(bytes)}'
           ' — will resume in background',
           name: 'StreamCache');
@@ -533,6 +590,7 @@ class StreamCacheService {
       await _saveIndex();
       await _enforceCap();
       final upHost = entry.upstream?.host ?? '?';
+      unawaited(_debugLog('PROMOTE key=$key bytes=$bytes title="${entry.title}"'));
       log('Cached "${entry.title}" (${_fmtBytes(bytes)}) from $upHost',
           name: 'StreamCache');
     } catch (e) {
@@ -566,6 +624,8 @@ class StreamCacheService {
       return;
     }
     if (have <= 0) return;
+    unawaited(
+        _debugLog('RESUMESTART key=$key have=$have title="${entry.title}"'));
     try {
       final clientReq = await _client.getUrl(upstream);
       entry.headers.forEach((k, v) {
@@ -578,6 +638,8 @@ class StreamCacheService {
       if (upRes.statusCode != HttpStatus.partialContent) {
         // Can't resume (expired URL, server refused Range, ...): drop the
         // partial; the next play retries from scratch.
+        unawaited(_debugLog(
+            'RESUMEEND key=$key have=$have status=${upRes.statusCode} result=dropped'));
         try {
           await part.delete();
         } catch (_) {}
@@ -602,6 +664,8 @@ class StreamCacheService {
           entry.contentType ??
           'audio/mpeg';
       await _promotePart(key, entry, dir, bytes, contentType);
+      unawaited(_debugLog(
+          'RESUMEEND key=$key have=$have bytes=$bytes status=206 result=promoted'));
       log('Resumed + cached "${entry.title}" (${_fmtBytes(bytes)})',
           name: 'StreamCache');
     } catch (_) {
@@ -640,17 +704,22 @@ class StreamCacheService {
     if (total <= _maxBytes) return;
     // Oldest access first.
     sized.sort((a, b) => a.lastAccess.compareTo(b.lastAccess));
+    final totalBefore = total;
+    var evicted = 0;
     for (final s in sized) {
       if (total <= _maxBytes) break;
       try {
         await s.file.delete();
         total -= s.bytes;
         _index.remove(s.key);
+        evicted++;
         log('Evicted cached "${_index[s.key]?['title'] ?? s.key}" to stay under cap',
             name: 'StreamCache');
       } catch (_) {}
     }
     await _saveIndex();
+    unawaited(_debugLog('ENFORCE before=$totalBefore after=$total '
+        'evicted=$evicted cap=$_maxBytes'));
   }
 
   void _touchAccess(String key) {
