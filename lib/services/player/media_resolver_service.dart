@@ -12,6 +12,7 @@ import 'package:Bloomee/services/db/dao/track_dao.dart';
 import 'package:Bloomee/services/db/db_provider.dart';
 import 'package:Bloomee/services/plugin/plugin_service.dart';
 import 'package:Bloomee/services/player/stream_quality_selector.dart';
+import 'package:Bloomee/services/player/stream_cache/stream_cache_service.dart';
 import 'package:Bloomee/src/rust/api/plugin/commands.dart';
 
 class ResolvedMediaSource {
@@ -166,6 +167,31 @@ class MediaResolverService {
         }
 
         log('Resolved stream: $streamUrl', name: 'MediaResolverService');
+
+        // Route through the transparent stream cache when enabled: the player
+        // gets a loopback URL, first play populates the disk cache, replays
+        // are served from disk (zero network, works offline).
+        try {
+          final cacheEnabled =
+              await _settingsDao.getSettingBool(SettingKeys.enableStreamCache) ??
+                  true;
+          if (cacheEnabled) {
+            final proxied = StreamCacheService.instance.proxyUriFor(
+              mediaId: track.id,
+              upstream: uri,
+              headers: selectedStream == null
+                  ? null
+                  : streamHeadersToMap(selectedStream.headers),
+              title: track.title,
+            );
+            if (proxied != null) {
+              return ResolvedMediaSource(uri: proxied, isOffline: false);
+            }
+          }
+        } catch (e) {
+          log('Stream cache bypassed: $e', name: 'MediaResolverService');
+        }
+
         return ResolvedMediaSource(
           uri: uri,
           isOffline: false,
