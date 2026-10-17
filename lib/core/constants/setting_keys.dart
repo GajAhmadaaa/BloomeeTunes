@@ -16,6 +16,12 @@ class SettingKeys {
   static const String autoResolveUnavailableTracks =
       "autoResolveUnavailableTracks";
 
+  /// Whether played streams are transparently cached to disk.
+  static const String enableStreamCache = "enableStreamCache";
+
+  /// Stream-cache size cap in megabytes, stored as a string ("0" = unlimited).
+  static const String streamCacheCapMB = "streamCacheCapMB";
+
   // ── Crossfade ───────────────────────────────────────────────────────────────
   /// Crossfade duration in seconds (0 = disabled). Stored as String.
   static const String crossfadeDuration = "crossfadeDuration";

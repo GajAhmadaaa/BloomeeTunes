@@ -1,0 +1,64 @@
+name: Build APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Flutter 3.47.7
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.47.7"
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build release APK
+        run: flutter build apk --release --build-number ${{ github.run_number }}
+
+      - name: Verify APK and record build info
+        run: |
+          APK=build/app/outputs/flutter-apk/app-release.apk
+          ls -lh "$APK"
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          echo "build-tools: $BT" | tee build-info.txt
+          sha256sum "$APK" | tee -a build-info.txt
+          "$BT/apksigner" verify --print-certs "$APK" | head -6 | tee -a build-info.txt
+          "$BT/aapt" dump badging "$APK" | head -3 | tee -a build-info.txt
+          echo "run: ${{ github.run_number }}  sha: ${{ github.sha }}" | tee -a build-info.txt
+
+      - name: Commit build info (skip CI)
+        run: |
+          git config user.name "muse-builder"
+          git config user.email "muse-builder@local"
+          git add build-info.txt
+          git commit -m "build info for run ${{ github.run_number }} [skip ci]" || echo "nothing to commit"
+          git push
+
+      - name: Create release with APK
+        run: |
+          TAG="build-${{ github.run_number }}"
+          gh release create "$TAG" build/app/outputs/flutter-apk/app-release.apk \
+            --title "Bloomee fork $TAG" \
+            --notes "Automated release build of the BloomeeTunes fork with stream cache. Signed with debug key for sideloading." \
+            --latest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

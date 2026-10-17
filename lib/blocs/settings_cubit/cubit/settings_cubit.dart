@@ -4,6 +4,7 @@ import 'package:Bloomee/core/constants/setting_keys.dart';
 import 'package:Bloomee/core/constants/cache_keys.dart';
 import 'package:Bloomee/repository/bloomee/settings_repository.dart';
 import 'package:Bloomee/services/player/stream_quality_selector.dart';
+import 'package:Bloomee/services/player/stream_cache/stream_cache_service.dart';
 import 'package:Bloomee/services/db/db_provider.dart';
 import 'package:Bloomee/utils/country_info.dart';
 import 'package:equatable/equatable.dart';
@@ -169,6 +170,17 @@ class SettingsCubit extends Cubit<SettingsState> {
             defaultValue: ''),
         SettingKeys.suggestionPluginId,
       ),
+      // [27] enableStreamCache
+      _readSetting(
+        () => _settingsRepo.getSettingBool(SettingKeys.enableStreamCache),
+        SettingKeys.enableStreamCache,
+      ),
+      // [28] streamCacheCapMB
+      _readSetting(
+        () => _settingsRepo.getSettingStr(SettingKeys.streamCacheCapMB,
+            defaultValue: '2048'),
+        SettingKeys.streamCacheCapMB,
+      ),
     ]);
 
     // Normalize stream quality labels.
@@ -280,6 +292,8 @@ class SettingsCubit extends Cubit<SettingsState> {
       resolverPriority: resolverPriority,
       lyricsPriority: lyricsPriority,
       suggestionPluginId: (results[26] as String?) ?? '',
+      streamCacheEnabled: (results[27] as bool?) ?? true,
+      streamCacheCapMB: (results[28] as String?) ?? '2048',
     ));
   }
 
@@ -428,6 +442,21 @@ class SettingsCubit extends Cubit<SettingsState> {
   void setAutoBackup(bool v) {
     _settingsRepo.putSettingBool(SettingKeys.autoBackup, v);
     emit(state.copyWith(autoBackup: v));
+  }
+
+  void setStreamCacheEnabled(bool v) {
+    _settingsRepo.putSettingBool(SettingKeys.enableStreamCache, v);
+    emit(state.copyWith(streamCacheEnabled: v));
+  }
+
+  void setStreamCacheCapMB(String v) {
+    _settingsRepo.putSettingStr(SettingKeys.streamCacheCapMB, v);
+    emit(state.copyWith(streamCacheCapMB: v));
+    // Apply immediately to the running cache service (LRU eviction runs async).
+    try {
+      StreamCacheService.instance
+          .setMaxBytes(StreamCacheService.mbStringToBytes(v));
+    } catch (_) {}
   }
 
   void setHistoryClearTime(String v) {

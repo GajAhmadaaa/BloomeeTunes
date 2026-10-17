@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:Bloomee/blocs/settings_cubit/cubit/settings_cubit.dart';
 import 'package:Bloomee/screens/screen/home_views/setting_views/setting_shared_widgets.dart';
 import 'package:Bloomee/screens/widgets/snackbar.dart';
+import 'package:Bloomee/services/player/stream_cache/stream_cache_service.dart';
 import 'package:Bloomee/services/storage_backup_service.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -44,6 +45,9 @@ class BackupSettings extends StatelessWidget {
           return ListView(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             children: [
+              // ── Stream cache ─────────────────────────────────────────
+              const _StreamCacheSection(),
+
               // ── History ──────────────────────────────────────────────
               SettingSectionHeader(label: l10n.settingsHistory),
               SettingCard(
@@ -691,4 +695,177 @@ Future<void> _showResultDialog(
       );
     },
   );
+}
+
+/// Stream-cache section: enable toggle, user-set size cap, usage, clear.
+///
+/// Note: strings here are plain English — the app's l10n files were not
+/// regenerated (requires `flutter gen-l10n` at build time).
+class _StreamCacheSection extends StatefulWidget {
+  const _StreamCacheSection();
+
+  @override
+  State<_StreamCacheSection> createState() => _StreamCacheSectionState();
+}
+
+class _StreamCacheSectionState extends State<_StreamCacheSection> {
+  int _usageNonce = 0;
+
+  static const _capOptions = <String, String>{
+    '256': '256 MB',
+    '512': '512 MB',
+    '1024': '1 GB',
+    '2048': '2 GB',
+    '5120': '5 GB',
+    '10240': '10 GB',
+    '0': 'Unlimited',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SettingSectionHeader(label: 'Stream cache'),
+        SettingCard(
+          children: [
+            BlocBuilder<SettingsCubit, SettingsState>(
+              buildWhen: (p, c) =>
+                  p.streamCacheEnabled != c.streamCacheEnabled ||
+                  p.streamCacheCapMB != c.streamCacheCapMB,
+              builder: (context, state) {
+                return Column(
+                  children: [
+                    SettingToggleTile(
+                      icon: Icons.cached,
+                      title: 'Cache played songs',
+                      subtitle:
+                          'Save songs to disk as you stream them. Replays play from disk — no mobile data, works offline.',
+                      value: state.streamCacheEnabled,
+                      onChanged: (v) => context
+                          .read<SettingsCubit>()
+                          .setStreamCacheEnabled(v),
+                    ),
+                    const SettingDivider(),
+                    SettingDropdownTile<String>(
+                      icon: Icons.storage_outlined,
+                      title: 'Cache size limit',
+                      subtitle:
+                          'When full, the least-recently-played songs are removed first.',
+                      value: _capOptions.containsKey(state.streamCacheCapMB)
+                          ? state.streamCacheCapMB
+                          : '2048',
+                      items: _capOptions.entries
+                          .map((e) => SettingDropdownItem<String>(
+                              value: e.key, label: e.value))
+                          .toList(),
+                      onChanged: (v) {
+                        if (v != null) {
+                          context.read<SettingsCubit>().setStreamCacheCapMB(v);
+                        }
+                      },
+                    ),
+                  ],
+                );
+              },
+            ),
+            const SettingDivider(),
+            _CacheUsageTile(key: ValueKey(_usageNonce)),
+            const SettingDivider(),
+            SettingDestructiveTile(
+              icon: Icons.delete_outline,
+              title: 'Clear stream cache',
+              subtitle: 'Delete all cached songs from disk.',
+              onTap: () => _confirmClearCache(context),
+            ),
+          ],
+        ),
+        const SizedBox(height: 20),
+      ],
+    );
+  }
+
+  Future<void> _confirmClearCache(BuildContext context) async {
+    final proceed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color.fromARGB(255, 24, 24, 24),
+        surfaceTintColor: const Color.fromARGB(255, 24, 24, 24),
+        title: Text(
+          'Clear stream cache?',
+          style: Default_Theme.secondoryTextStyle.merge(
+            const TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.bold),
+          ),
+        ),
+        content: Text(
+          'This deletes all cached songs from disk. Your downloads and library are not affected.',
+          style: Default_Theme.secondoryTextStyle.merge(
+            const TextStyle(color: Colors.white70, fontSize: 14),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text('Cancel',
+                style: Default_Theme.secondoryTextStyle
+                    .merge(const TextStyle(color: Colors.white))),
+          ),
+          ElevatedButton(
+            style:
+                ElevatedButton.styleFrom(backgroundColor: Colors.red.shade700),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Clear', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+    if (proceed != true) return;
+    try {
+      await StreamCacheService.instance.clear();
+      if (mounted) setState(() => _usageNonce++);
+      SnackbarService.showMessage('Stream cache cleared');
+    } catch (e) {
+      SnackbarService.showMessage('Failed to clear cache: $e');
+    }
+  }
+}
+
+class _CacheUsageTile extends StatelessWidget {
+  const _CacheUsageTile({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<({int files, int bytes})>(
+      future: StreamCacheService.instance.usage(),
+      builder: (context, snap) {
+        final u = snap.data;
+        final subtitle = !StreamCacheService.instance.isRunning
+            ? 'Cache service not running'
+            : u == null
+                ? 'Calculating…'
+                : '${u.files} songs · ${_formatBytes(u.bytes)}';
+        return SettingNavTile(
+          icon: Icons.data_usage,
+          title: 'Cache usage',
+          subtitle: subtitle,
+          onTap: () {},
+        );
+      },
+    );
+  }
+}
+
+String _formatBytes(int bytes) {
+  if (bytes < 1024) return '$bytes B';
+  const units = ['KB', 'MB', 'GB', 'TB'];
+  var v = bytes.toDouble();
+  var u = 0;
+  while (v >= 1024 && u < units.length - 1) {
+    v /= 1024;
+    u++;
+  }
+  return '${v.toStringAsFixed(v >= 100 ? 0 : 1)} ${units[u]}';
 }
