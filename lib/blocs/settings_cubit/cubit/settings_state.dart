@@ -35,6 +35,12 @@ class SettingsState extends Equatable {
   final List<String> lyricsPriority; // lyrics provider plugin priority order
   final String suggestionPluginId; // search suggestion provider plugin
 
+  /// Whether played streams are cached to disk (transparent stream cache).
+  final bool streamCacheEnabled;
+
+  /// Stream-cache size cap in megabytes, as a string ("0" = unlimited).
+  final String streamCacheCapMB;
+
   const SettingsState({
     required this.settingsReady,
     required this.autoUpdateNotify,
@@ -64,6 +70,8 @@ class SettingsState extends Equatable {
     required this.resolverPriority,
     required this.lyricsPriority,
     required this.suggestionPluginId,
+    required this.streamCacheEnabled,
+    required this.streamCacheCapMB,
   });
 
   SettingsState copyWith({
@@ -95,6 +103,8 @@ class SettingsState extends Equatable {
     List<String>? resolverPriority,
     List<String>? lyricsPriority,
     String? suggestionPluginId,
+    bool? streamCacheEnabled,
+    String? streamCacheCapMB,
   }) {
     return SettingsState(
       settingsReady: settingsReady ?? this.settingsReady,
@@ -132,6 +142,8 @@ class SettingsState extends Equatable {
           ? List<String>.from(lyricsPriority)
           : List<String>.from(this.lyricsPriority),
       suggestionPluginId: suggestionPluginId ?? this.suggestionPluginId,
+      streamCacheEnabled: streamCacheEnabled ?? this.streamCacheEnabled,
+      streamCacheCapMB: streamCacheCapMB ?? this.streamCacheCapMB,
     );
   }
 
@@ -165,6 +177,8 @@ class SettingsState extends Equatable {
         resolverPriority,
         lyricsPriority,
         suggestionPluginId,
+        streamCacheEnabled,
+        streamCacheCapMB,
       ];
 }
 
@@ -199,5 +213,7 @@ class SettingsInitial extends SettingsState {
           resolverPriority: const [],
           lyricsPriority: const [],
           suggestionPluginId: '',
+          streamCacheEnabled: true,
+          streamCacheCapMB: '2048',
         );
 }
