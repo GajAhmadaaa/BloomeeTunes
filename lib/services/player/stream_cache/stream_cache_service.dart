@@ -167,6 +167,35 @@ class StreamCacheService {
     return (files: files, bytes: bytes);
   }
 
+  /// Per-file cache contents for the in-app diagnostics view (biggest first).
+  /// Each entry: title, bytes (actual on-disk size), cachedAt (ISO-8601),
+  /// upstream (full source URL, may be '' for entries cached before this
+  /// field existed), contentType.
+  Future<List<Map<String, dynamic>>> cacheEntries() async {
+    final dir = _dir;
+    if (dir == null || !await dir.exists()) return [];
+    final out = <Map<String, dynamic>>[];
+    await for (final e in dir.list()) {
+      if (e is File && e.path.endsWith('.bin')) {
+        final key = fileNameKey(e);
+        var bytes = 0;
+        try {
+          bytes = await e.length();
+        } catch (_) {}
+        final idx = _index[key];
+        out.add({
+          'title': idx?['title'] as String? ?? key,
+          'bytes': bytes,
+          'cachedAt': idx?['cachedAt'] as String? ?? '',
+          'upstream': idx?['upstream'] as String? ?? '',
+          'contentType': idx?['contentType'] as String? ?? '',
+        });
+      }
+    }
+    out.sort((a, b) => (b['bytes'] as int).compareTo(a['bytes'] as int));
+    return out;
+  }
+
   /// Deletes every cached song. Registrations are kept — the next play of a
   /// cleared song simply re-fetches it from upstream.
   Future<void> clear() async {
@@ -497,10 +526,15 @@ class StreamCacheService {
         'bytes': bytes,
         'cachedAt': now,
         'lastAccess': now,
+        // Full upstream URL for forensics (e.g. why a "song" is gigabytes).
+        // Stays on-device in index.json; tokens inside expire anyway.
+        'upstream': entry.upstream?.toString() ?? '',
       };
       await _saveIndex();
       await _enforceCap();
-      log('Cached "${entry.title}" (${_fmtBytes(bytes)})', name: 'StreamCache');
+      final upHost = entry.upstream?.host ?? '?';
+      log('Cached "${entry.title}" (${_fmtBytes(bytes)}) from $upHost',
+          name: 'StreamCache');
     } catch (e) {
       try {
         if (await tmp.exists()) await tmp.delete();
