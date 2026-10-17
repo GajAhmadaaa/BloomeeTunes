@@ -6,6 +6,7 @@ import 'package:Bloomee/core/di/service_locator.dart';
 import 'package:Bloomee/services/db/dao/settings_dao.dart';
 import 'package:Bloomee/services/local_music_service.dart';
 import 'package:Bloomee/services/plugin_bootstrap_service.dart';
+import 'package:Bloomee/services/player/stream_cache/stream_cache_service.dart';
 import 'package:Bloomee/services/onboarding_service.dart';
 import 'package:Bloomee/src/rust/frb_generated.dart';
 import 'package:Bloomee/services/db/db_provider.dart';
@@ -29,6 +30,23 @@ Future<void> bootstrapApp() async {
   await DBProvider.init(
       appSupportPath: appSuppPath, appDocumentsPath: appDocPath);
   DBProvider.scheduleMaintenance();
+
+  // Start the transparent stream cache (loopback HTTP server). Non-fatal:
+  // if it fails, playback falls back to direct streaming.
+  try {
+    final settingsDao = SettingsDAO(DBProvider.db);
+    final capMB = await settingsDao.getSettingStr(
+      SettingKeys.streamCacheCapMB,
+      defaultValue: '2048',
+    );
+    StreamCacheService.instance.setMaxBytes(
+      StreamCacheService.mbStringToBytes(capMB),
+    );
+    await StreamCacheService.instance
+        .start(cacheDir: '$appSuppPath/stream_cache');
+  } catch (e) {
+    log('Stream cache unavailable (non-fatal)', error: e, name: 'Bootstrap');
+  }
 
   // DI wiring (registers singletons).
   await ServiceLocator.setup();
