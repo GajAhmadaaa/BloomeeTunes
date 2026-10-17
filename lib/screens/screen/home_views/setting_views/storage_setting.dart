@@ -904,9 +904,14 @@ class _CacheUsageTile extends StatelessWidget {
 
 /// In-app cache forensics: what is actually on disk, biggest first.
 /// Tap an entry to see where it was downloaded from.
-class _CacheContentsSheet extends StatelessWidget {
+class _CacheContentsSheet extends StatefulWidget {
   const _CacheContentsSheet();
 
+  @override
+  State<_CacheContentsSheet> createState() => _CacheContentsSheetState();
+}
+
+class _CacheContentsSheetState extends State<_CacheContentsSheet> {
   @override
   Widget build(BuildContext context) {
     return SafeArea(
@@ -1005,13 +1010,20 @@ class _CacheContentsSheet extends StatelessWidget {
                               ),
                               subtitle: Text(
                                 '${_formatBytes(e['bytes'] as int)}'
+                                '${(e['quality'] as String).isNotEmpty ? ' · ${e['quality']}' : ''}'
                                 '${shownDate.isEmpty ? '' : ' · $shownDate'}',
                                 style: const TextStyle(
                                     color: Colors.white60, fontSize: 12),
                               ),
                               trailing: const Icon(Icons.chevron_right,
                                   color: Colors.white38, size: 20),
-                              onTap: () => _showEntryDetails(context, e),
+                              onTap: () => _showEntryDetails(
+                                context,
+                                e,
+                                onDeleted: () {
+                                  if (mounted) setState(() {});
+                                },
+                              ),
                             );
                           },
                         ),
@@ -1067,7 +1079,8 @@ class _CacheContentsSheet extends StatelessWidget {
     );
   }
 
-  void _showEntryDetails(BuildContext context, Map<String, dynamic> e) {
+  void _showEntryDetails(
+      BuildContext context, Map<String, dynamic> e, {VoidCallback? onDeleted}) {
     final upstream = (e['upstream'] as String?) ?? '';
     final uri = Uri.tryParse(upstream);
     showDialog(
@@ -1087,6 +1100,9 @@ class _CacheContentsSheet extends StatelessWidget {
               _detailRow('Type', (e['contentType'] as String).isEmpty
                   ? '—'
                   : e['contentType'] as String),
+              _detailRow('Quality', (e['quality'] as String).isEmpty
+                  ? '—'
+                  : e['quality'] as String),
               _detailRow('Source host', uri?.host ?? '—'),
               const SizedBox(height: 8),
               const Text('Source URL',
@@ -1101,6 +1117,42 @@ class _CacheContentsSheet extends StatelessWidget {
           ),
         ),
         actions: [
+          TextButton(
+            onPressed: () async {
+              final confirm = await showDialog<bool>(
+                context: ctx,
+                builder: (c2) => AlertDialog(
+                  backgroundColor: const Color(0xFF1B1B1B),
+                  title: const Text('Delete cached song?',
+                      style: TextStyle(color: Colors.white, fontSize: 16)),
+                  content: Text(
+                      'Remove "${e['title']}" from the cache? It will be downloaded again next time you play it.',
+                      style: const TextStyle(
+                          color: Colors.white70, fontSize: 13)),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.of(c2).pop(false),
+                      child: const Text('Cancel',
+                          style: TextStyle(color: Colors.white)),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.of(c2).pop(true),
+                      child: const Text('Delete',
+                          style: TextStyle(color: Colors.redAccent)),
+                    ),
+                  ],
+                ),
+              );
+              if (confirm == true) {
+                await StreamCacheService.instance
+                    .deleteEntry(e['key'] as String);
+                if (ctx.mounted) Navigator.of(ctx).pop();
+                onDeleted?.call();
+              }
+            },
+            child: const Text('Delete',
+                style: TextStyle(color: Colors.redAccent)),
+          ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
             child: const Text('Close',

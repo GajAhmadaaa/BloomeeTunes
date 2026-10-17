@@ -48,6 +48,9 @@ class PlayerSettings extends StatelessWidget {
       body: BlocBuilder<SettingsCubit, SettingsState>(
         buildWhen: (prev, curr) =>
             prev.strmQuality != curr.strmQuality ||
+            prev.strmQualityWifi != curr.strmQualityWifi ||
+            prev.strmQualityMobile != curr.strmQualityMobile ||
+            prev.streamAudioOnly != curr.streamAudioOnly ||
             prev.autoPlay != curr.autoPlay ||
             prev.autoResolveUnavailableTracks !=
                 curr.autoResolveUnavailableTracks ||
@@ -64,17 +67,46 @@ class PlayerSettings extends StatelessWidget {
               SettingCard(
                 children: [
                   SettingQualityChipRow(
-                    icon: MingCute.cellphone_vibration_line,
-                    title: l10n.playerSettingStreamQuality,
-                    subtitle: l10n.playerSettingStreamQualitySubtitle,
+                    icon: MingCute.wifi_line,
+                    title: 'Streaming quality (Wi-Fi)',
+                    subtitle:
+                        'Audio bitrate used when connected to Wi-Fi.',
                     options: [
                       l10n.playerSettingQualityLow,
                       l10n.playerSettingQualityMedium,
                       l10n.playerSettingQualityHigh,
                     ],
-                    selected: state.strmQuality,
-                    onSelected: (v) =>
-                        context.read<SettingsCubit>().setStrmQuality(v),
+                    selected: state.strmQualityWifi,
+                    onSelected: (v) => context
+                        .read<SettingsCubit>()
+                        .setStrmQualityWifi(v),
+                  ),
+                  const SettingDivider(),
+                  SettingQualityChipRow(
+                    icon: MingCute.cellphone_line,
+                    title: 'Streaming quality (mobile data)',
+                    subtitle:
+                        'Audio bitrate used on mobile data. Lower saves data.',
+                    options: [
+                      l10n.playerSettingQualityLow,
+                      l10n.playerSettingQualityMedium,
+                      l10n.playerSettingQualityHigh,
+                    ],
+                    selected: state.strmQualityMobile,
+                    onSelected: (v) => context
+                        .read<SettingsCubit>()
+                        .setStrmQualityMobile(v),
+                  ),
+                  const SettingDivider(),
+                  SettingToggleTile(
+                    icon: MingCute.music_line,
+                    title: 'Audio-only streams',
+                    subtitle:
+                        'Prefer audio-only sources and skip video streams.',
+                    value: state.streamAudioOnly,
+                    onChanged: (v) => context
+                        .read<SettingsCubit>()
+                        .setStreamAudioOnly(v),
                   ),
                 ],
               ),

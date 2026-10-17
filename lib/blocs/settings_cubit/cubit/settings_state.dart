@@ -8,6 +8,9 @@ class SettingsState extends Equatable {
   final String downPath;
   final String downQuality;
   final String strmQuality;
+  final String strmQualityWifi;
+  final String strmQualityMobile;
+  final bool streamAudioOnly;
   final String backupPath;
   final bool autoBackup;
   final String historyClearTime;
@@ -49,6 +52,9 @@ class SettingsState extends Equatable {
     required this.downPath,
     required this.downQuality,
     required this.strmQuality,
+    required this.strmQualityWifi,
+    required this.strmQualityMobile,
+    required this.streamAudioOnly,
     required this.backupPath,
     required this.autoBackup,
     required this.historyClearTime,
@@ -83,6 +89,9 @@ class SettingsState extends Equatable {
     String? downPath,
     String? downQuality,
     String? strmQuality,
+    String? strmQualityWifi,
+    String? strmQualityMobile,
+    bool? streamAudioOnly,
     String? backupPath,
     bool? autoBackup,
     String? historyClearTime,
@@ -116,6 +125,9 @@ class SettingsState extends Equatable {
       downPath: downPath ?? this.downPath,
       downQuality: downQuality ?? this.downQuality,
       strmQuality: strmQuality ?? this.strmQuality,
+      strmQualityWifi: strmQualityWifi ?? this.strmQualityWifi,
+      strmQualityMobile: strmQualityMobile ?? this.strmQualityMobile,
+      streamAudioOnly: streamAudioOnly ?? this.streamAudioOnly,
       backupPath: backupPath ?? this.backupPath,
       autoBackup: autoBackup ?? this.autoBackup,
       historyClearTime: historyClearTime ?? this.historyClearTime,
@@ -159,6 +171,9 @@ class SettingsState extends Equatable {
         downPath,
         downQuality,
         strmQuality,
+        strmQualityWifi,
+        strmQualityMobile,
+        streamAudioOnly,
         backupPath,
         autoBackup,
         historyClearTime,
@@ -196,6 +211,9 @@ class SettingsInitial extends SettingsState {
           downPath: "",
           downQuality: "Medium",
           strmQuality: "High",
+          strmQualityWifi: "High",
+          strmQualityMobile: "Medium",
+          streamAudioOnly: false,
           backupPath: "",
           autoBackup: true,
           historyClearTime: "30",
