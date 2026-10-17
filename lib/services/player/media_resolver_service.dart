@@ -73,6 +73,28 @@ class MediaResolverService {
       // Non-fatal — continue to online resolution
     }
 
+    // 1b. Fully cached stream: serve straight from disk with zero network.
+    // This MUST come before plugin resolution — resolving a fresh stream URL
+    // needs internet (InnerTube + cipher manifest), so offline replay would
+    // fail there even though the song bytes are already on disk.
+    try {
+      final cacheEnabled =
+          await _settingsDao.getSettingBool(SettingKeys.enableStreamCache) ??
+              true;
+      if (cacheEnabled) {
+        final cached =
+            await StreamCacheService.instance.cachedUriFor(mediaId: track.id);
+        if (cached != null) {
+          log('Playing from stream cache: ${track.title}',
+              name: 'MediaResolverService');
+          return ResolvedMediaSource(uri: cached, isOffline: true);
+        }
+      }
+    } catch (e) {
+      log('Stream cache lookup failed: $e', name: 'MediaResolverService');
+      // Non-fatal — continue to online resolution
+    }
+
     // 2. Plugin-based stream resolution.
     final parts = tryParseMediaId(track.id);
     if (parts == null) {

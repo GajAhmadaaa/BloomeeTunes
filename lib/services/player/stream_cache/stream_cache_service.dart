@@ -37,6 +37,11 @@ class StreamCacheService {
   final HttpClient _client = HttpClient()..autoUncompress = false;
   bool _starting = false;
 
+  /// Keys currently being fetched (teeing to the player, or background fill).
+  /// While a key is busy, new requests for it proxy straight through so two
+  /// writers never touch the same `.part` file.
+  final Set<String> _busyKeys = {};
+
   /// 0 means unlimited.
   int _maxBytes = 2 * 1024 * 1024 * 1024;
 
@@ -111,6 +116,37 @@ class StreamCacheService {
       title: (title?.isNotEmpty ?? false) ? title! : mediaId,
       contentType: contentType,
     );
+    return Uri.parse('http://127.0.0.1:${server.port}/c/$key');
+  }
+
+  /// Returns a loopback URL for [mediaId] when a COMPLETE cached file is on
+  /// disk, without touching the network at all.
+  ///
+  /// This is the offline-playback path: callers should try this BEFORE asking
+  /// a plugin to resolve fresh stream URLs (resolution needs internet for the
+  /// InnerTube/cipher handshake). Returns null when the server isn't running
+  /// or the track isn't fully cached.
+  Future<Uri?> cachedUriFor({required String mediaId}) async {
+    final server = _server;
+    final dir = _dir;
+    if (server == null || dir == null) return null;
+    final key = _keyFor(mediaId);
+    var complete = false;
+    try {
+      complete = await File('${dir.path}/$key.bin').exists();
+    } catch (_) {
+      return null;
+    }
+    if (!complete) return null;
+    _registry[key] = _UpstreamEntry(
+      mediaId: mediaId,
+      // Fully cached: the file is served from disk, never fetched upstream.
+      upstream: null,
+      headers: const {},
+      title: _index[key]?['title'] as String? ?? mediaId,
+      contentType: _index[key]?['contentType'] as String?,
+    );
+    _touchAccess(key);
     return Uri.parse('http://127.0.0.1:${server.port}/c/$key');
   }
 
@@ -237,11 +273,64 @@ class StreamCacheService {
       HttpRequest req, String key, _UpstreamEntry entry) async {
     final dir = _dir!;
     final res = req.response;
-    final range = req.headers.value(HttpHeaders.rangeHeader);
-    // Only cache full, non-ranged responses fetched from byte 0.
-    final cacheable = range == null;
+    final upstream = entry.upstream;
+    if (upstream == null) {
+      // Registered as fully cached, but the file vanished (e.g. evicted by
+      // the cap) between the lookup and this request.
+      res.statusCode = HttpStatus.notFound;
+      await res.close();
+      return;
+    }
 
-    final clientReq = await _client.getUrl(entry.upstream);
+    // Parse the client's Range header. Players based on ffmpeg/MPV send
+    // "Range: bytes=0-" on the very first request; that is semantically a
+    // full fetch from byte 0, so we treat it as cacheable. Genuine mid-file
+    // ranges (start > 0, e.g. after a seek) proxy straight through.
+    final rangeHeader = req.headers.value(HttpHeaders.rangeHeader);
+    var fromStart = true;
+    if (rangeHeader != null) {
+      final m = RegExp(r'bytes=(\d+)-(\d*)').firstMatch(rangeHeader);
+      if (m == null) {
+        fromStart = false;
+      } else {
+        fromStart = int.parse(m.group(1)!) == 0 && m.group(2)!.isEmpty;
+      }
+    }
+
+    if (_busyKeys.contains(key)) {
+      // Another fetch for this track is already writing the cache file.
+      await _passthrough(req, entry, upstream);
+      return;
+    }
+
+    if (!fromStart) {
+      await _passthrough(req, entry, upstream);
+      return;
+    }
+
+    // From-start fetch: pull the whole stream from upstream, pipe it to the
+    // player *while* writing it to disk.
+    _busyKeys.add(key);
+    var completed = false;
+    try {
+      completed = await _teeFromStart(req, res, key, entry, upstream, dir);
+    } finally {
+      _busyKeys.remove(key);
+    }
+    if (!completed) {
+      // The player went away early (seek, skip, close). Keep the partial
+      // file and fetch the remainder in the background so the song still
+      // ends up fully cached.
+      _resumeInBackground(key);
+    }
+  }
+
+  /// Proxies one request straight to upstream without touching the cache.
+  Future<void> _passthrough(
+      HttpRequest req, _UpstreamEntry entry, Uri upstream) async {
+    final res = req.response;
+    final range = req.headers.value(HttpHeaders.rangeHeader);
+    final clientReq = await _client.getUrl(upstream);
     entry.headers.forEach((k, v) {
       try {
         clientReq.headers.set(k, v);
@@ -270,24 +359,85 @@ class StreamCacheService {
       final v = upRes.headers.value(h);
       if (v != null) res.headers.set(h, v);
     }
-    final contentType = upRes.headers.contentType?.mimeType;
-
-    // Never cache encoded (e.g. gzipped) bodies — the on-disk file must be
-    // plain audio bytes so it can be served back with a plain content-type.
-    final cacheableNow =
-        cacheable && upRes.headers.value(HttpHeaders.contentEncodingHeader) == null;
-
-    if (upRes.statusCode != HttpStatus.ok || !cacheableNow) {
-      // Ranged/partial, encoded, or error responses stream straight through
-      // uncached.
+    try {
       await res.addStream(upRes);
       await res.close();
-      return;
+    } catch (_) {
+      // Player went away; nothing to do.
+      try {
+        await res.close();
+      } catch (_) {}
     }
+  }
+
+  /// Fetches the full stream from byte 0, streams it to the player and tees
+  /// it into `<key>.part`. Returns true when the whole stream was cached
+  /// (file renamed to `<key>.bin`); false when the player disconnected early.
+  ///
+  /// The client's Range header is intentionally NOT forwarded upstream: a
+  /// "bytes=0-" request is answered with a plain 200 + full body, which is
+  /// legal HTTP and keeps the on-disk file a plain concatenation of bytes.
+  Future<bool> _teeFromStart(HttpRequest req, HttpResponse res, String key,
+      _UpstreamEntry entry, Uri upstream, Directory dir) async {
+    late final HttpClientResponse upRes;
+    try {
+      final clientReq = await _client.getUrl(upstream);
+      entry.headers.forEach((k, v) {
+        try {
+          clientReq.headers.set(k, v);
+        } catch (_) {}
+      });
+      upRes = await clientReq.close();
+    } catch (e) {
+      log('Upstream fetch failed for ${entry.title}: $e', name: 'StreamCache');
+      res.statusCode = HttpStatus.badGateway;
+      try {
+        await res.close();
+      } catch (_) {}
+      return false;
+    }
+
+    // Never cache encoded (e.g. gzipped) bodies — the on-disk file must be
+    // plain audio bytes.
+    final plain = upRes.headers.value(HttpHeaders.contentEncodingHeader) == null;
+    if (upRes.statusCode != HttpStatus.ok || !plain) {
+      // Error or encoded: stream straight through uncached.
+      res.statusCode = upRes.statusCode;
+      for (final h in [
+        HttpHeaders.contentTypeHeader,
+        HttpHeaders.contentLengthHeader,
+        HttpHeaders.acceptRangesHeader,
+        HttpHeaders.contentRangeHeader,
+        HttpHeaders.contentEncodingHeader,
+      ]) {
+        final v = upRes.headers.value(h);
+        if (v != null) res.headers.set(h, v);
+      }
+      try {
+        await res.addStream(upRes);
+        await res.close();
+      } catch (_) {
+        try {
+          await res.close();
+        } catch (_) {}
+      }
+      return false;
+    }
+
+    final contentType = upRes.headers.contentType?.mimeType;
+    res.statusCode = HttpStatus.ok;
+    res.headers.set(HttpHeaders.contentTypeHeader,
+        contentType ?? entry.contentType ?? 'audio/mpeg');
+    res.headers.set(HttpHeaders.acceptRangesHeader, 'bytes');
+    final upstreamLength = upRes.contentLength;
+    if (upstreamLength >= 0) res.contentLength = upstreamLength;
 
     final tmp = File('${dir.path}/$key.part');
     IOSink? sink;
     try {
+      // Start fresh; a stale partial from an older session is dropped here
+      // (a resume only continues a partial from THIS session, see below).
+      if (await tmp.exists()) await tmp.delete();
       sink = tmp.openWrite();
     } catch (_) {
       sink = null;
@@ -299,50 +449,129 @@ class StreamCacheService {
         res.add(chunk);
         sink?.add(chunk);
       }
-      await res.close();
+      try {
+        await res.close();
+      } catch (_) {}
       try {
         await sink?.flush();
         await sink?.close();
       } catch (_) {}
       if (bytes > 0) {
-        final done = File('${dir.path}/$key.bin');
-        try {
-          if (await done.exists()) await done.delete();
-          await tmp.rename(done.path);
-          final now = DateTime.now().toIso8601String();
-          _index[key] = {
-            'mediaId': entry.mediaId,
-            'title': entry.title,
-            'contentType': contentType ?? entry.contentType ?? 'audio/mpeg',
-            'bytes': bytes,
-            'cachedAt': now,
-            'lastAccess': now,
-          };
-          await _saveIndex();
-          await _enforceCap();
-          log('Cached "${entry.title}" (${_fmtBytes(bytes)})',
-              name: 'StreamCache');
-        } catch (e) {
-          try {
-            if (await tmp.exists()) await tmp.delete();
-          } catch (_) {}
-        }
-      } else {
-        try {
-          if (await tmp.exists()) await tmp.delete();
-        } catch (_) {}
+        await _promotePart(key, entry, dir, bytes,
+            contentType ?? entry.contentType ?? 'audio/mpeg');
+        return true;
       }
+      try {
+        if (await tmp.exists()) await tmp.delete();
+      } catch (_) {}
+      return false;
     } catch (e) {
-      // Player went away mid-stream — drop the partial file.
+      // Player went away mid-stream: keep the partial file; the remainder
+      // is fetched in the background by [_resumeInBackground].
       try {
         await sink?.close();
       } catch (_) {}
       try {
-        if (await tmp.exists()) await tmp.delete();
-      } catch (_) {}
-      try {
         await res.close();
       } catch (_) {}
+      log('Tee interrupted for "${entry.title}" after ${_fmtBytes(bytes)}'
+          ' — will resume in background',
+          name: 'StreamCache');
+      return false;
+    }
+  }
+
+  /// Moves `<key>.part` to `<key>.bin` and records it in the index.
+  Future<void> _promotePart(String key, _UpstreamEntry entry, Directory dir,
+      int bytes, String contentType) async {
+    final tmp = File('${dir.path}/$key.part');
+    final done = File('${dir.path}/$key.bin');
+    try {
+      if (await done.exists()) await done.delete();
+      await tmp.rename(done.path);
+      final now = DateTime.now().toIso8601String();
+      _index[key] = {
+        'mediaId': entry.mediaId,
+        'title': entry.title,
+        'contentType': contentType,
+        'bytes': bytes,
+        'cachedAt': now,
+        'lastAccess': now,
+      };
+      await _saveIndex();
+      await _enforceCap();
+      log('Cached "${entry.title}" (${_fmtBytes(bytes)})', name: 'StreamCache');
+    } catch (e) {
+      try {
+        if (await tmp.exists()) await tmp.delete();
+      } catch (_) {}
+    }
+  }
+
+  /// Kicks off a background fetch that appends the missing tail of `<key>.part`
+  /// (from a tee interrupted by a seek/skip) and promotes it to `<key>.bin`.
+  void _resumeInBackground(String key) {
+    if (_busyKeys.contains(key)) return;
+    final entry = _registry[key];
+    final dir = _dir;
+    final upstream = entry?.upstream;
+    if (entry == null || dir == null || upstream == null) return;
+    _busyKeys.add(key);
+    unawaited(_doResume(key, entry, upstream, dir)
+        .whenComplete(() => _busyKeys.remove(key)));
+  }
+
+  Future<void> _doResume(String key, _UpstreamEntry entry, Uri upstream,
+      Directory dir) async {
+    final part = File('${dir.path}/$key.part');
+    var have = 0;
+    try {
+      if (!await part.exists()) return;
+      have = await part.length();
+    } catch (_) {
+      return;
+    }
+    if (have <= 0) return;
+    try {
+      final clientReq = await _client.getUrl(upstream);
+      entry.headers.forEach((k, v) {
+        try {
+          clientReq.headers.set(k, v);
+        } catch (_) {}
+      });
+      clientReq.headers.set(HttpHeaders.rangeHeader, 'bytes=$have-');
+      final upRes = await clientReq.close();
+      if (upRes.statusCode != HttpStatus.partialContent) {
+        // Can't resume (expired URL, server refused Range, ...): drop the
+        // partial; the next play retries from scratch.
+        try {
+          await part.delete();
+        } catch (_) {}
+        return;
+      }
+      final sink = part.openWrite(mode: FileMode.append);
+      var bytes = have;
+      try {
+        await for (final chunk in upRes) {
+          bytes += chunk.length;
+          sink.add(chunk);
+        }
+        await sink.flush();
+        await sink.close();
+      } catch (_) {
+        try {
+          await sink.close();
+        } catch (_) {}
+        return; // keep partial for a later attempt
+      }
+      final contentType = upRes.headers.contentType?.mimeType ??
+          entry.contentType ??
+          'audio/mpeg';
+      await _promotePart(key, entry, dir, bytes, contentType);
+      log('Resumed + cached "${entry.title}" (${_fmtBytes(bytes)})',
+          name: 'StreamCache');
+    } catch (_) {
+      // Network hiccup: leave the .part for a later attempt.
     }
   }
 
@@ -448,7 +677,9 @@ class StreamCacheService {
 
 class _UpstreamEntry {
   final String mediaId;
-  final Uri upstream;
+  /// Null when the track is fully cached — the file is served from disk and
+  /// never fetched upstream.
+  final Uri? upstream;
   final Map<String, String> headers;
   final String title;
   String? contentType;
