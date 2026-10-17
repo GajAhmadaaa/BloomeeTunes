@@ -50,6 +50,15 @@ class StreamCacheService {
   /// (A 3-minute song is a few MB; 256 MB already covers hour-long mixes.)
   int _maxFileBytes = 256 * 1024 * 1024;
 
+  /// Cache keys of tracks that have actually started playback. Only tees
+  /// for these are promoted to cached songs. Tracks that were merely
+  /// pre-resolved (next in queue) but never played stay as pending .part
+  /// files until another track starts, then are dropped.
+  final Set<String> _confirmedIds = <String>{};
+
+  /// Fully-teed .part files waiting for their track to start playing.
+  final Map<String, _UpstreamEntry> _pendingParts = <String, _UpstreamEntry>{};
+
   bool get isRunning => _server != null;
   int get port => _server?.port ?? -1;
 
@@ -71,6 +80,61 @@ class StreamCacheService {
   /// Sets the per-file size guard. 0 (or negative) disables the guard.
   void setMaxFileBytes(int bytes) {
     _maxFileBytes = bytes < 0 ? 0 : bytes;
+  }
+
+  /// Call when a track actually starts playing. Its pending .part (if the
+  /// tee already finished while it was only pre-resolved) gets promoted to
+  /// a cached song; pending parts of tracks that never played are dropped.
+  void notePlaybackStarted(String trackId) {
+    final key = _keyFor(trackId);
+    _confirmedIds.add(key);
+    // Bound memory: only recent tracks matter.
+    if (_confirmedIds.length > 500) {
+      _confirmedIds.remove(_confirmedIds.first);
+    }
+    final pending = _pendingParts.remove(key);
+    if (pending != null) {
+      unawaited(_promotePending(key, pending));
+    }
+    // Drop pending parts for other tracks — pre-resolved but never played.
+    if (_pendingParts.isNotEmpty) {
+      for (final k in _pendingParts.keys.toList()) {
+        _pendingParts.remove(k);
+        unawaited(_deletePartFile(k));
+      }
+    }
+  }
+
+  Future<void> _promotePending(String key, _UpstreamEntry entry) async {
+    try {
+      final dir = _dir;
+      if (dir == null) return;
+      final part = File('${dir.path}/$key.part');
+      if (!await part.exists()) return;
+      final len = await part.length();
+      if (len <= 0) {
+        try {
+          await part.delete();
+        } catch (_) {}
+        return;
+      }
+      await _promotePart(
+          key, entry, dir, len, entry.contentType ?? 'audio/mpeg');
+      unawaited(_debugLog(
+          'PROMOTEPENDING key=$key bytes=$len title="${entry.title}"'));
+    } catch (e) {
+      log('Pending promote failed for $key: $e', name: 'StreamCache');
+    }
+  }
+
+  Future<void> _deletePartFile(String key) async {
+    try {
+      final dir = _dir;
+      if (dir == null) return;
+      final part = File('${dir.path}/$key.part');
+      if (await part.exists()) await part.delete();
+      unawaited(_debugLog('PENDINGDROP key=$key'));
+    } catch (_) {}
   }
 
   Future<void> start({required String cacheDir}) async {
@@ -262,6 +326,8 @@ class StreamCacheService {
       }
     }
     _index.clear();
+    _pendingParts.clear();
+    _confirmedIds.clear();
     await _saveIndex();
     log('Stream cache cleared', name: 'StreamCache');
   }
@@ -566,11 +632,23 @@ class StreamCacheService {
         await sink?.close();
       } catch (_) {}
       if (bytes > 0 && !guardTripped) {
-        await _promotePart(key, entry, dir, bytes,
-            contentType ?? entry.contentType ?? 'audio/mpeg');
-        unawaited(_debugLog('TEEEND key=$key bytes=$bytes '
-            'declared=$upstreamLength elapsedMs=${teeWatch.elapsedMilliseconds} '
-            'result=promoted'));
+        if (_confirmedIds.contains(key)) {
+          await _promotePart(key, entry, dir, bytes,
+              contentType ?? entry.contentType ?? 'audio/mpeg');
+          unawaited(_debugLog('TEEEND key=$key bytes=$bytes '
+              'declared=$upstreamLength elapsedMs=${teeWatch.elapsedMilliseconds} '
+              'result=promoted'));
+        } else {
+          // Tee finished but the track never started playing (it was only
+          // pre-resolved as "next"). Hold the .part: it promotes when
+          // notePlaybackStarted arrives, or is dropped when another track
+          // starts.
+          entry.contentType = contentType ?? entry.contentType;
+          _pendingParts[key] = entry;
+          unawaited(_debugLog('TEEEND key=$key bytes=$bytes '
+              'declared=$upstreamLength elapsedMs=${teeWatch.elapsedMilliseconds} '
+              'result=pending-playback'));
+        }
         return true;
       }
       try {
@@ -710,11 +788,20 @@ class StreamCacheService {
       final contentType = upRes.headers.contentType?.mimeType ??
           entry.contentType ??
           'audio/mpeg';
-      await _promotePart(key, entry, dir, bytes, contentType);
-      unawaited(_debugLog(
-          'RESUMEEND key=$key have=$have bytes=$bytes status=206 result=promoted'));
-      log('Resumed + cached "${entry.title}" (${_fmtBytes(bytes)})',
-          name: 'StreamCache');
+      if (_confirmedIds.contains(key)) {
+        await _promotePart(key, entry, dir, bytes, contentType);
+        unawaited(_debugLog(
+            'RESUMEEND key=$key have=$have bytes=$bytes status=206 result=promoted'));
+        log('Resumed + cached "${entry.title}" (${_fmtBytes(bytes)})',
+            name: 'StreamCache');
+      } else {
+        // Resume finished but the track never started playing — hold as
+        // pending, same as the from-start path.
+        entry.contentType = contentType;
+        _pendingParts[key] = entry;
+        unawaited(_debugLog(
+            'RESUMEEND key=$key have=$have bytes=$bytes status=206 result=pending-playback'));
+      }
     } catch (_) {
       // Network hiccup: leave the .part for a later attempt.
     }

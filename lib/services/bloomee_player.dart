@@ -15,6 +15,7 @@ import 'package:Bloomee/services/db/db_provider.dart';
 import 'package:Bloomee/services/db/dao/settings_dao.dart';
 import 'package:Bloomee/services/player/media_resolver_service.dart';
 import 'package:Bloomee/services/player/player_engine.dart';
+import 'package:Bloomee/services/player/stream_cache/stream_cache_service.dart';
 import 'package:Bloomee/services/player/player_error_handler.dart';
 import 'package:Bloomee/services/player/queue_manager.dart';
 import 'package:Bloomee/services/player/related_songs_manager.dart';
@@ -649,6 +650,11 @@ class BloomeeMusicPlayer extends BaseAudioHandler
       if (initialPosition != null && initialPosition > Duration.zero) {
         await engine.seek(initialPosition);
       }
+
+      // This track actually started playing (not just pre-resolved as next):
+      // its tee'd bytes may now be promoted to a cached song, and pending
+      // parts of tracks that never played are dropped.
+      StreamCacheService.instance.notePlaybackStarted(resolvedTrack.id);
 
       isResolving.add(false);
       _errorHandler.clearError();
