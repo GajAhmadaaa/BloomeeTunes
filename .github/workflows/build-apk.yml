@@ -55,8 +55,10 @@ jobs:
 
       - name: Create release with APK
         run: |
-          TAG="build-${{ github.run_number }}"
-          gh release create "$TAG" build/app/outputs/flutter-apk/app-release.apk \
+          VERSION="$(grep '^version:' pubspec.yaml | sed 's/^version: //' | cut -d'+' -f1)"
+          TAG="v${VERSION}+${{ github.run_number }}"
+          APK_NAME="bloomee-fork-android-${TAG}.apk"
+          gh release create "$TAG" "build/app/outputs/flutter-apk/app-release.apk#${APK_NAME}" \
             --title "Bloomee fork $TAG" \
             --notes "Automated release build of the BloomeeTunes fork with stream cache. Signed with debug key for sideloading." \
             --latest
