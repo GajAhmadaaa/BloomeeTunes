@@ -721,6 +721,15 @@ class _StreamCacheSectionState extends State<_StreamCacheSection> {
     '0': 'Unlimited',
   };
 
+  static const _maxFileOptions = <String, String>{
+    '128': '128 MB',
+    '256': '256 MB',
+    '512': '512 MB',
+    '1024': '1 GB',
+    '2048': '2 GB',
+    '0': 'Unlimited',
+  };
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -732,7 +741,8 @@ class _StreamCacheSectionState extends State<_StreamCacheSection> {
             BlocBuilder<SettingsCubit, SettingsState>(
               buildWhen: (p, c) =>
                   p.streamCacheEnabled != c.streamCacheEnabled ||
-                  p.streamCacheCapMB != c.streamCacheCapMB,
+                  p.streamCacheCapMB != c.streamCacheCapMB ||
+                  p.streamCacheMaxFileMB != c.streamCacheMaxFileMB,
               builder: (context, state) {
                 return Column(
                   children: [
@@ -762,6 +772,28 @@ class _StreamCacheSectionState extends State<_StreamCacheSection> {
                       onChanged: (v) {
                         if (v != null) {
                           context.read<SettingsCubit>().setStreamCacheCapMB(v);
+                        }
+                      },
+                    ),
+                    const SettingDivider(),
+                    SettingDropdownTile<String>(
+                      icon: Icons.file_download_done_outlined,
+                      title: 'Max song size',
+                      subtitle:
+                          'A single song bigger than this is not cached (it still plays normally).',
+                      value: _maxFileOptions
+                              .containsKey(state.streamCacheMaxFileMB)
+                          ? state.streamCacheMaxFileMB
+                          : '256',
+                      items: _maxFileOptions.entries
+                          .map((e) => SettingDropdownItem<String>(
+                              value: e.key, label: e.value))
+                          .toList(),
+                      onChanged: (v) {
+                        if (v != null) {
+                          context
+                              .read<SettingsCubit>()
+                              .setStreamCacheMaxFileMB(v);
                         }
                       },
                     ),

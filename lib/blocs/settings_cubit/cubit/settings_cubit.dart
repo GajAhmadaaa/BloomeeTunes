@@ -181,6 +181,12 @@ class SettingsCubit extends Cubit<SettingsState> {
             defaultValue: '2048'),
         SettingKeys.streamCacheCapMB,
       ),
+      // [29] streamCacheMaxFileMB
+      _readSetting(
+        () => _settingsRepo.getSettingStr(SettingKeys.streamCacheMaxFileMB,
+            defaultValue: '256'),
+        SettingKeys.streamCacheMaxFileMB,
+      ),
     ]);
 
     // Normalize stream quality labels.
@@ -294,6 +300,7 @@ class SettingsCubit extends Cubit<SettingsState> {
       suggestionPluginId: (results[26] as String?) ?? '',
       streamCacheEnabled: (results[27] as bool?) ?? true,
       streamCacheCapMB: (results[28] as String?) ?? '2048',
+      streamCacheMaxFileMB: (results[29] as String?) ?? '256',
     ));
   }
 
@@ -456,6 +463,17 @@ class SettingsCubit extends Cubit<SettingsState> {
     try {
       StreamCacheService.instance
           .setMaxBytes(StreamCacheService.mbStringToBytes(v));
+    } catch (_) {}
+  }
+
+  void setStreamCacheMaxFileMB(String v) {
+    _settingsRepo.putSettingStr(SettingKeys.streamCacheMaxFileMB, v);
+    emit(state.copyWith(streamCacheMaxFileMB: v));
+    // Apply immediately to the running cache service.
+    try {
+      StreamCacheService.instance
+          .setMaxFileBytes(StreamCacheService.mbStringToBytes(v,
+              defaultMb: 256));
     } catch (_) {}
   }
 

@@ -21,6 +21,7 @@ class SettingKeys {
 
   /// Stream-cache size cap in megabytes, stored as a string ("0" = unlimited).
   static const String streamCacheCapMB = "streamCacheCapMB";
+  static const String streamCacheMaxFileMB = "streamCacheMaxFileMB";
 
   // ── Crossfade ───────────────────────────────────────────────────────────────
   /// Crossfade duration in seconds (0 = disabled). Stored as String.

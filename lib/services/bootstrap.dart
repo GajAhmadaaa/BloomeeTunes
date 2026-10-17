@@ -42,6 +42,13 @@ Future<void> bootstrapApp() async {
     StreamCacheService.instance.setMaxBytes(
       StreamCacheService.mbStringToBytes(capMB),
     );
+    final maxFileMB = await settingsDao.getSettingStr(
+      SettingKeys.streamCacheMaxFileMB,
+      defaultValue: '256',
+    );
+    StreamCacheService.instance.setMaxFileBytes(
+      StreamCacheService.mbStringToBytes(maxFileMB, defaultMb: 256),
+    );
     await StreamCacheService.instance
         .start(cacheDir: '$appSuppPath/stream_cache');
   } catch (e) {
