@@ -1133,8 +1133,7 @@ class _CacheContentsSheet extends StatelessWidget {
 }
 
 String _formatBytes(int bytes) {
-  if (bytes < 1024) return '$bytes B';
-  const units = ['KB', 'MB', 'GB', 'TB'];
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   var v = bytes.toDouble();
   var u = 0;
   while (v >= 1024 && u < units.length - 1) {
