@@ -124,10 +124,12 @@ class StreamQualitySelector {
   static StreamSource? selectPlaybackStream(
     List<StreamSource> streams, {
     required AudioStreamQualityPreference preference,
+    bool audioOnly = false,
   }) {
     return _select(
       streams,
       fallbackOrder: _streamingFallbackOrder[preference]!,
+      audioOnly: audioOnly,
     );
   }
 
@@ -144,8 +146,17 @@ class StreamQualitySelector {
   static StreamSource? _select(
     List<StreamSource> streams, {
     required List<Quality> fallbackOrder,
+    bool audioOnly = false,
   }) {
-    final usable = streams.where(_isUsableStream).toList(growable: false);
+    var usable = streams.where(_isUsableStream).toList(growable: false);
+    if (audioOnly) {
+      final audioStreams = usable.where((s) => !_isVideoStream(s)).toList();
+      // Only apply the filter if it leaves something playable; otherwise
+      // fall back to the unfiltered list rather than failing playback.
+      if (audioStreams.isNotEmpty) {
+        usable = audioStreams;
+      }
+    }
     if (usable.isEmpty) {
       return null;
     }
@@ -159,6 +170,20 @@ class StreamQualitySelector {
     }
 
     return usable.first;
+  }
+
+  /// Best-effort video detection. YouTube stream URLs carry a `mime` query
+  /// parameter (e.g. `mime=video%2Fmp4` for itag 18); the `format` field is
+  /// consulted as a fallback. Unknown streams are treated as audio so the
+  /// filter never breaks playback for lack of metadata.
+  static bool _isVideoStream(StreamSource stream) {
+    final url = stream.url.toLowerCase();
+    if (url.contains('mime=video')) return true;
+    if (url.contains('mime=audio')) return false;
+    final format = stream.format.toLowerCase();
+    if (format.contains('video')) return true;
+    if (format.contains('audio')) return false;
+    return false;
   }
 
   static bool _isUsableStream(StreamSource stream) {

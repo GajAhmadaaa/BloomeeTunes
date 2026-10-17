@@ -187,6 +187,23 @@ class SettingsCubit extends Cubit<SettingsState> {
             defaultValue: '256'),
         SettingKeys.streamCacheMaxFileMB,
       ),
+      // [30] strmQualityWifi
+      _readSetting(
+        () => _settingsRepo.getSettingStr(SettingKeys.strmQualityWifi,
+            defaultValue: 'High'),
+        SettingKeys.strmQualityWifi,
+      ),
+      // [31] strmQualityMobile
+      _readSetting(
+        () => _settingsRepo.getSettingStr(SettingKeys.strmQualityMobile,
+            defaultValue: 'Medium'),
+        SettingKeys.strmQualityMobile,
+      ),
+      // [32] streamAudioOnly
+      _readSetting(
+        () => _settingsRepo.getSettingBool(SettingKeys.streamAudioOnly),
+        SettingKeys.streamAudioOnly,
+      ),
     ]);
 
     // Normalize stream quality labels.
@@ -301,6 +318,9 @@ class SettingsCubit extends Cubit<SettingsState> {
       streamCacheEnabled: (results[27] as bool?) ?? true,
       streamCacheCapMB: (results[28] as String?) ?? '2048',
       streamCacheMaxFileMB: (results[29] as String?) ?? '256',
+      strmQualityWifi: (results[30] as String?) ?? 'High',
+      strmQualityMobile: (results[31] as String?) ?? 'Medium',
+      streamAudioOnly: (results[32] as bool?) ?? false,
     ));
   }
 
@@ -439,6 +459,25 @@ class SettingsCubit extends Cubit<SettingsState> {
         fallback: AudioStreamQualityPreference.high.label);
     _settingsRepo.putSettingStr(SettingKeys.strmQuality, n);
     emit(state.copyWith(strmQuality: n));
+  }
+
+  void setStrmQualityWifi(String v) {
+    final n = normalizeStoredStreamQualityLabel(v,
+        fallback: AudioStreamQualityPreference.high.label);
+    _settingsRepo.putSettingStr(SettingKeys.strmQualityWifi, n);
+    emit(state.copyWith(strmQualityWifi: n));
+  }
+
+  void setStrmQualityMobile(String v) {
+    final n = normalizeStoredStreamQualityLabel(v,
+        fallback: AudioStreamQualityPreference.medium.label);
+    _settingsRepo.putSettingStr(SettingKeys.strmQualityMobile, n);
+    emit(state.copyWith(strmQualityMobile: n));
+  }
+
+  void setStreamAudioOnly(bool v) {
+    _settingsRepo.putSettingBool(SettingKeys.streamAudioOnly, v);
+    emit(state.copyWith(streamAudioOnly: v));
   }
 
   void setBackupPath(String v) {

@@ -1,5 +1,7 @@
 import 'dart:developer';
 
+import 'package:connectivity_plus/connectivity_plus.dart';
+
 import 'package:Bloomee/core/events/global_event_bus.dart';
 import 'package:Bloomee/core/constants/setting_keys.dart';
 import 'package:Bloomee/core/models/exported.dart';
@@ -36,6 +38,21 @@ class MediaResolverService {
   final DownloadDAO _downloadDao;
   final SettingsDAO _settingsDao;
   final PluginService _pluginService;
+
+  /// Returns the settings key for stream quality based on the current
+  /// connection type. Wi-Fi uses [SettingKeys.strmQualityWifi], mobile data
+  /// (or unknown) uses [SettingKeys.strmQualityMobile].
+  Future<String> _streamQualityKeyForConnection() async {
+    try {
+      final results = await Connectivity().checkConnectivity();
+      if (results.contains(ConnectivityResult.wifi)) {
+        return SettingKeys.strmQualityWifi;
+      }
+    } catch (_) {
+      // Fall through to mobile on any error.
+    }
+    return SettingKeys.strmQualityMobile;
+  }
 
   MediaResolverService({
     required DownloadDAO downloadDao,
@@ -149,25 +166,26 @@ class MediaResolverService {
           throw Exception('No streams returned for "${track.title}"');
         }
 
-        final storedQuality = await _settingsDao.getSettingStr(
-          SettingKeys.strmQuality,
-        );
+        // Pick stream quality based on connection type (Wi-Fi vs mobile).
+        final qualityKey = await _streamQualityKeyForConnection();
+        final storedQuality = await _settingsDao.getSettingStr(qualityKey);
         final normalizedQuality = normalizeStoredStreamQualityLabel(
           storedQuality,
           fallback: AudioStreamQualityPreference.high.label,
         );
         if (storedQuality != normalizedQuality) {
-          await _settingsDao.putSettingStr(
-            SettingKeys.strmQuality,
-            normalizedQuality,
-          );
+          await _settingsDao.putSettingStr(qualityKey, normalizedQuality);
         }
         final preference = AudioStreamQualityPreferenceX.fromStored(
           normalizedQuality,
         );
+        final audioOnly =
+            await _settingsDao.getSettingBool(SettingKeys.streamAudioOnly) ??
+                false;
         final selectedStream = StreamQualitySelector.selectPlaybackStream(
           streams,
           preference: preference,
+          audioOnly: audioOnly,
         );
         final streamUrl = selectedStream?.url.trim();
 
@@ -205,6 +223,7 @@ class MediaResolverService {
                   ? null
                   : streamHeadersToMap(selectedStream.headers),
               title: track.title,
+              quality: preference.label,
             );
             if (proxied != null) {
               return ResolvedMediaSource(uri: proxied, isOffline: false);

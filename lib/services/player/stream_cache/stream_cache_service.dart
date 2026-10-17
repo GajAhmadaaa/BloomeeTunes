@@ -179,6 +179,7 @@ class StreamCacheService {
     Map<String, String>? headers,
     String? title,
     String? contentType,
+    String? quality,
   }) {
     final server = _server;
     if (server == null) return null;
@@ -189,6 +190,7 @@ class StreamCacheService {
       headers: headers ?? const {},
       title: (title?.isNotEmpty ?? false) ? title! : mediaId,
       contentType: contentType,
+      quality: quality,
     );
     return Uri.parse('http://127.0.0.1:${server.port}/c/$key');
   }
@@ -258,11 +260,13 @@ class StreamCacheService {
         } catch (_) {}
         final idx = _index[key];
         out.add({
+          'key': key,
           'title': idx?['title'] as String? ?? key,
           'bytes': bytes,
           'cachedAt': idx?['cachedAt'] as String? ?? '',
           'upstream': idx?['upstream'] as String? ?? '',
           'contentType': idx?['contentType'] as String? ?? '',
+          'quality': idx?['quality'] as String? ?? '',
         });
       }
     }
@@ -312,6 +316,38 @@ class StreamCacheService {
     } catch (_) {}
   }
 
+  /// Deletes a single cached song by its cache key. Returns true if something
+  /// was deleted.
+  Future<bool> deleteEntry(String key) async {
+    final dir = _dir;
+    if (dir == null) return false;
+    var deleted = false;
+    final bin = File('${dir.path}/$key.bin');
+    final part = File('${dir.path}/$key.part');
+    try {
+      if (await bin.exists()) {
+        await bin.delete();
+        deleted = true;
+      }
+    } catch (_) {}
+    try {
+      if (await part.exists()) {
+        await part.delete();
+        deleted = true;
+      }
+    } catch (_) {}
+    if (_index.remove(key) != null) {
+      deleted = true;
+      await _saveIndex();
+    }
+    _pendingParts.remove(key);
+    _registry.remove(key);
+    if (deleted) {
+      unawaited(_debugLog('DELETE key=$key'));
+    }
+    return deleted;
+  }
+
   /// Deletes every cached song. Registrations are kept — the next play of a
   /// cleared song simply re-fetches it from upstream.
   Future<void> clear() async {
@@ -353,6 +389,9 @@ class StreamCacheService {
       final entry = _registry[key];
       final dir = _dir;
       if (entry == null || dir == null) {
+        // Stale proxy URL (e.g. after a cache clear wiped the registry).
+        unawaited(_debugLog(
+            'REQ404 key=$key reason=${entry == null ? 'no-entry' : 'no-dir'}'));
         req.response
           ..statusCode = HttpStatus.notFound
           ..close();
@@ -539,6 +578,7 @@ class StreamCacheService {
       upRes = await clientReq.close();
     } catch (e) {
       log('Upstream fetch failed for ${entry.title}: $e', name: 'StreamCache');
+      unawaited(_debugLog('UPSTREAMFAIL key=$key title="${entry.title}" error="$e"'));
       res.statusCode = HttpStatus.badGateway;
       try {
         await res.close();
@@ -696,6 +736,7 @@ class StreamCacheService {
         // Full upstream URL for forensics (e.g. why a "song" is gigabytes).
         // Stays on-device in index.json; tokens inside expire anyway.
         'upstream': entry.upstream?.toString() ?? '',
+        'quality': entry.quality ?? '',
       };
       await _saveIndex();
       await _enforceCap();
@@ -919,6 +960,7 @@ class _UpstreamEntry {
   final Map<String, String> headers;
   final String title;
   String? contentType;
+  final String? quality;
 
   _UpstreamEntry({
     required this.mediaId,
@@ -926,5 +968,6 @@ class _UpstreamEntry {
     required this.headers,
     required this.title,
     this.contentType,
+    this.quality,
   });
 }

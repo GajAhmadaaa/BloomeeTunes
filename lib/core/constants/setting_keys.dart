@@ -12,6 +12,9 @@ class SettingKeys {
 
   // ── Playback ────────────────────────────────────────────────────────────────
   static const String strmQuality = "streamQuality";
+  static const String strmQualityWifi = "streamQualityWifi";
+  static const String strmQualityMobile = "streamQualityMobile";
+  static const String streamAudioOnly = "streamAudioOnly";
   static const String autoPlay = "autoPlaySimilarItems";
   static const String autoResolveUnavailableTracks =
       "autoResolveUnavailableTracks";
