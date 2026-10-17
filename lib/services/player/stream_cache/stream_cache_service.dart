@@ -114,6 +114,13 @@ class StreamCacheService {
     return Uri.parse('http://127.0.0.1:${server.port}/c/$key');
   }
 
+  /// Returns a loopback URL for [mediaId] when a COMPLETE cached file is on
+  /// disk, without touching the network at all.
+  ///
+  /// This is the offline-playback path: callers should try this BEFORE asking
+  /// a plugin to resolve fresh stream URLs (resolution needs internet for the
+  /// InnerTube/cipher handshake). Returns null when the server isn't running
+  /// or the track isn't fully cached.
   /// Total cached songs and bytes on disk.
   Future<({int files, int bytes})> usage() async {
     final dir = _dir;
@@ -237,11 +244,19 @@ class StreamCacheService {
       HttpRequest req, String key, _UpstreamEntry entry) async {
     final dir = _dir!;
     final res = req.response;
+    final upstream = entry.upstream;
+    if (upstream == null) {
+      // Registered as fully cached, but the file vanished (e.g. evicted by
+      // the cap) between the lookup and this request.
+      res.statusCode = HttpStatus.notFound;
+      await res.close();
+      return;
+    }
     final range = req.headers.value(HttpHeaders.rangeHeader);
     // Only cache full, non-ranged responses fetched from byte 0.
     final cacheable = range == null;
 
-    final clientReq = await _client.getUrl(entry.upstream);
+    final clientReq = await _client.getUrl(upstream);
     entry.headers.forEach((k, v) {
       try {
         clientReq.headers.set(k, v);
@@ -323,29 +338,6 @@ class StreamCacheService {
           log('Cached "${entry.title}" (${_fmtBytes(bytes)})',
               name: 'StreamCache');
         } catch (e) {
-          try {
-            if (await tmp.exists()) await tmp.delete();
-          } catch (_) {}
-        }
-      } else {
-        try {
-          if (await tmp.exists()) await tmp.delete();
-        } catch (_) {}
-      }
-    } catch (e) {
-      // Player went away mid-stream — drop the partial file.
-      try {
-        await sink?.close();
-      } catch (_) {}
-      try {
-        if (await tmp.exists()) await tmp.delete();
-      } catch (_) {}
-      try {
-        await res.close();
-      } catch (_) {}
-    }
-  }
-
   // ─── Cap enforcement (LRU) ──────────────────────────────────────────────
 
   Future<void> _enforceCap() async {
@@ -448,7 +440,9 @@ class StreamCacheService {
 
 class _UpstreamEntry {
   final String mediaId;
-  final Uri upstream;
+  /// Null when the track is fully cached — the file is served from disk and
+  /// never fetched upstream.
+  final Uri? upstream;
   final Map<String, String> headers;
   final String title;
   String? contentType;
@@ -461,3 +455,50 @@ class _UpstreamEntry {
     this.contentType,
   });
 }
+
+          try {
+            if (await tmp.exists()) await tmp.delete();
+          } catch (_) {}
+        }
+      } else {
+        try {
+          if (await tmp.exists()) await tmp.delete();
+        } catch (_) {}
+      }
+    } catch (e) {
+      // Player went away mid-stream — drop the partial file.
+      try {
+        await sink?.close();
+      } catch (_) {}
+      try {
+        if (await tmp.exists()) await tmp.delete();
+      } catch (_) {}
+      try {
+        await res.close();
+      } catch (_) {}
+    }
+  }
+
+  Future<Uri?> cachedUriFor({required String mediaId}) async {
+    final server = _server;
+    final dir = _dir;
+    if (server == null || dir == null) return null;
+    final key = _keyFor(mediaId);
+    var complete = false;
+    try {
+      complete = await File('${dir.path}/$key.bin').exists();
+    } catch (_) {
+      return null;
+    }
+    if (!complete) return null;
+    _registry[key] = _UpstreamEntry(
+      mediaId: mediaId,
+      // Fully cached: the file is served from disk, never fetched upstream.
+      upstream: null,
+      headers: const {},
+      title: _index[key]?['title'] as String? ?? mediaId,
+      contentType: _index[key]?['contentType'] as String?,
+    );
+    _touchAccess(key);
+    return Uri.parse('http://127.0.0.1:${server.port}/c/$key');
+  }
