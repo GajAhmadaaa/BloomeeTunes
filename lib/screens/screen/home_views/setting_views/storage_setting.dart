@@ -851,9 +851,199 @@ class _CacheUsageTile extends StatelessWidget {
           icon: Icons.data_usage,
           title: 'Cache usage',
           subtitle: subtitle,
-          onTap: () {},
+          onTap: () => _showCacheContents(context),
         );
       },
+    );
+  }
+
+  void _showCacheContents(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1B1B1B),
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => const _CacheContentsSheet(),
+    );
+  }
+}
+
+/// In-app cache forensics: what is actually on disk, biggest first.
+/// Tap an entry to see where it was downloaded from.
+class _CacheContentsSheet extends StatelessWidget {
+  const _CacheContentsSheet();
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.white24,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Cached songs',
+              style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 4),
+            FutureBuilder<List<Map<String, dynamic>>>(
+              future: StreamCacheService.instance.cacheEntries(),
+              builder: (context, snap) {
+                final entries = snap.data;
+                if (entries == null) {
+                  return const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 24),
+                    child: Center(
+                        child:
+                            CircularProgressIndicator(color: Colors.white70)),
+                  );
+                }
+                if (entries.isEmpty) {
+                  return const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 24),
+                    child: Center(
+                      child: Text('Cache is empty',
+                          style: TextStyle(color: Colors.white70)),
+                    ),
+                  );
+                }
+                final total =
+                    entries.fold<int>(0, (s, e) => s + (e['bytes'] as int));
+                return Flexible(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${entries.length} songs · ${_formatBytes(total)} total',
+                        style: const TextStyle(
+                            color: Colors.white70, fontSize: 13),
+                      ),
+                      const SizedBox(height: 8),
+                      Flexible(
+                        child: ListView.separated(
+                          shrinkWrap: true,
+                          itemCount: entries.length,
+                          separatorBuilder: (_, __) =>
+                              const Divider(color: Colors.white12, height: 1),
+                          itemBuilder: (context, i) {
+                            final e = entries[i];
+                            final date = (e['cachedAt'] as String)
+                                .replaceFirst('T', ' ');
+                            final shownDate =
+                                date.length >= 16 ? date.substring(0, 16) : date;
+                            return ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              dense: true,
+                              title: Text(
+                                e['title'] as String,
+                                style: const TextStyle(
+                                    color: Colors.white, fontSize: 14),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              subtitle: Text(
+                                '${_formatBytes(e['bytes'] as int)}'
+                                '${shownDate.isEmpty ? '' : ' · $shownDate'}',
+                                style: const TextStyle(
+                                    color: Colors.white60, fontSize: 12),
+                              ),
+                              trailing: const Icon(Icons.chevron_right,
+                                  color: Colors.white38, size: 20),
+                              onTap: () => _showEntryDetails(context, e),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showEntryDetails(BuildContext context, Map<String, dynamic> e) {
+    final upstream = (e['upstream'] as String?) ?? '';
+    final uri = Uri.tryParse(upstream);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1B1B1B),
+        title: Text(
+          e['title'] as String,
+          style: const TextStyle(color: Colors.white, fontSize: 16),
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _detailRow('Size', _formatBytes(e['bytes'] as int)),
+              _detailRow('Type', (e['contentType'] as String).isEmpty
+                  ? '—'
+                  : e['contentType'] as String),
+              _detailRow('Source host', uri?.host ?? '—'),
+              const SizedBox(height: 8),
+              const Text('Source URL',
+                  style: TextStyle(color: Colors.white70, fontSize: 12)),
+              const SizedBox(height: 4),
+              SelectableText(
+                upstream.isEmpty ? '— (cached before URL logging)' : upstream,
+                style:
+                    const TextStyle(color: Colors.white60, fontSize: 11),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Close',
+                style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _detailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 90,
+            child: Text(label,
+                style: const TextStyle(color: Colors.white70, fontSize: 12)),
+          ),
+          Expanded(
+            child: Text(value,
+                style: const TextStyle(color: Colors.white, fontSize: 12)),
+          ),
+        ],
+      ),
     );
   }
 }
