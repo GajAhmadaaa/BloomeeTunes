@@ -592,17 +592,32 @@ class StreamCacheService {
       while (true) {
         final end = offset + _chunkSize - 1;
         late final HttpClientResponse upRes;
-        try {
-          final clientReq = await _client.getUrl(upstream);
-          entry.headers.forEach((k, v) {
-            try {
-              clientReq.headers.set(k, v);
-            } catch (_) {}
-          });
-          clientReq.headers
-              .set(HttpHeaders.rangeHeader, 'bytes=$offset-$end');
-          upRes = await clientReq.close();
-        } catch (e) {
+        // Retry once: the CDN may close the keep-alive connection between
+        // chunks, and the pooled connection can fail on reuse.
+        HttpClientResponse? fetched;
+        Object? fetchErr;
+        for (var attempt = 0; attempt < 2 && fetched == null; attempt++) {
+          try {
+            final clientReq = await _client.getUrl(upstream);
+            // Fresh connection per chunk — don't reuse a pooled one the
+            // server may have closed.
+            clientReq.persistentConnection = false;
+            entry.headers.forEach((k, v) {
+              try {
+                clientReq.headers.set(k, v);
+              } catch (_) {}
+            });
+            clientReq.headers
+                .set(HttpHeaders.rangeHeader, 'bytes=$offset-$end');
+            fetched = await clientReq.close();
+          } catch (e) {
+            fetchErr = e;
+            unawaited(_debugLog('CHUNKRETRY key=$key offset=$offset '
+                'attempt=$attempt error="$e"'));
+          }
+        }
+        if (fetched == null) {
+          final e = fetchErr;
           log('Upstream fetch failed for ${entry.title}: $e',
               name: 'StreamCache');
           unawaited(_debugLog(
@@ -615,6 +630,7 @@ class StreamCacheService {
           }
           return false;
         }
+        upRes = fetched;
 
         // First chunk: learn total size and set up the player response.
         if (!headersSent) {
@@ -682,6 +698,8 @@ class StreamCacheService {
         }
 
         // Last chunk is smaller than requested, or we've reached the total.
+        unawaited(_debugLog(
+            'CHUNK key=$key offset=$offset got=$chunkBytes total=$bytes'));
         if (chunkBytes < _chunkSize) break;
         offset += chunkBytes;
         if (totalLength != null && offset >= totalLength!) break;
@@ -817,23 +835,32 @@ class StreamCacheService {
       while (true) {
         final end = offset + _chunkSize - 1;
         late final HttpClientResponse upRes;
-        try {
-          final clientReq = await _client.getUrl(upstream);
-          entry.headers.forEach((k, v) {
-            try {
-              clientReq.headers.set(k, v);
-            } catch (_) {}
-          });
-          // Bounded chunk — iOS CDN rejects unbounded ranges.
-          clientReq.headers.set(HttpHeaders.rangeHeader, 'bytes=$offset-$end');
-          upRes = await clientReq.close();
-        } catch (_) {
+        HttpClientResponse? fetched;
+        for (var attempt = 0; attempt < 2 && fetched == null; attempt++) {
+          try {
+            final clientReq = await _client.getUrl(upstream);
+            clientReq.persistentConnection = false;
+            entry.headers.forEach((k, v) {
+              try {
+                clientReq.headers.set(k, v);
+              } catch (_) {}
+            });
+            // Bounded chunk — iOS CDN rejects unbounded ranges.
+            clientReq.headers.set(HttpHeaders.rangeHeader, 'bytes=$offset-$end');
+            fetched = await clientReq.close();
+          } catch (e) {
+            unawaited(_debugLog('CHUNKRETRY key=$key offset=$offset '
+                'attempt=$attempt error="$e" (resume)'));
+          }
+        }
+        if (fetched == null) {
           // Network hiccup: leave the .part for a later attempt.
           try {
             await sink.close();
           } catch (_) {}
           return;
         }
+        upRes = fetched;
         if (upRes.statusCode != HttpStatus.partialContent) {
           // Can't resume (expired URL, server refused Range, ...): drop the
           // partial; the next play retries from scratch.
