@@ -4,6 +4,7 @@ import 'package:Bloomee/blocs/settings_cubit/cubit/settings_cubit.dart';
 import 'package:Bloomee/screens/screen/home_views/setting_views/setting_shared_widgets.dart';
 import 'package:Bloomee/screens/widgets/snackbar.dart';
 import 'package:Bloomee/services/player/stream_cache/stream_cache_service.dart';
+import 'package:Bloomee/services/player/stream_quality_diagnostic.dart';
 import 'package:Bloomee/services/storage_backup_service.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -943,6 +944,13 @@ class _CacheContentsSheetState extends State<_CacheContentsSheet> {
                         fontWeight: FontWeight.bold),
                   ),
                 ),
+                // TEMPORARY (dev only): stream quality diagnostic viewer.
+                IconButton(
+                  icon: const Icon(Icons.science_outlined,
+                      color: Colors.orangeAccent),
+                  tooltip: 'Stream diagnostic (temporary)',
+                  onPressed: () => _showStreamDiagnostic(context),
+                ),
               ],
             ),
             const SizedBox(height: 4),
@@ -1029,6 +1037,38 @@ class _CacheContentsSheetState extends State<_CacheContentsSheet> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  // TEMPORARY (dev only): shows the last stream-quality diagnostic report.
+  void _showStreamDiagnostic(BuildContext context) {
+    final report = StreamQualityDiagnostic.lastReport;
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1B1B1B),
+        title: const Text(
+          'Stream diagnostic (temporary)',
+          style: TextStyle(color: Colors.white, fontSize: 16),
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          height: 400,
+          child: SingleChildScrollView(
+            child: SelectableText(
+              report ?? 'No song resolved yet. Play a song first.',
+              style: const TextStyle(color: Colors.white60, fontSize: 11),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child:
+                const Text('Close', style: TextStyle(color: Colors.white)),
+          ),
+        ],
       ),
     );
   }

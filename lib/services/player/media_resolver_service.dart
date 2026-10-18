@@ -14,6 +14,7 @@ import 'package:Bloomee/services/db/dao/track_dao.dart';
 import 'package:Bloomee/services/db/db_provider.dart';
 import 'package:Bloomee/services/plugin/plugin_service.dart';
 import 'package:Bloomee/services/player/stream_quality_selector.dart';
+import 'package:Bloomee/services/player/stream_quality_diagnostic.dart';
 import 'package:Bloomee/services/player/stream_cache/stream_cache_service.dart';
 import 'package:Bloomee/src/rust/api/plugin/commands.dart';
 
@@ -186,6 +187,15 @@ class MediaResolverService {
           streams,
           preference: preference,
           audioOnly: audioOnly,
+        );
+        // TEMPORARY (dev only): record what the plugin returned and what each
+        // quality preference would pick. Read-only: does not change playback.
+        StreamQualityDiagnostic.record(
+          trackTitle: track.title,
+          streams: streams,
+          audioOnly: audioOnly,
+          userPreference: preference,
+          userSelected: selectedStream,
         );
         final streamUrl = selectedStream?.url.trim();
 
