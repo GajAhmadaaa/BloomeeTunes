@@ -951,6 +951,13 @@ class _CacheContentsSheetState extends State<_CacheContentsSheet> {
                   tooltip: 'Stream diagnostic (temporary)',
                   onPressed: () => _showStreamDiagnostic(context),
                 ),
+                // TEMPORARY (dev only): proxy debug log viewer.
+                IconButton(
+                  icon: const Icon(Icons.bug_report_outlined,
+                      color: Colors.lightBlueAccent),
+                  tooltip: 'Proxy log (temporary)',
+                  onPressed: () => _showProxyLog(context),
+                ),
               ],
             ),
             const SizedBox(height: 4),
@@ -1037,6 +1044,40 @@ class _CacheContentsSheetState extends State<_CacheContentsSheet> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  // TEMPORARY (dev only): shows the proxy debug log.
+  void _showProxyLog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1B1B1B),
+        title: const Text(
+          'Proxy log (temporary)',
+          style: TextStyle(color: Colors.white, fontSize: 16),
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          height: 400,
+          child: FutureBuilder<String>(
+            future: StreamCacheService.instance.readDebugLog(),
+            builder: (ctx, snap) => SingleChildScrollView(
+              child: SelectableText(
+                snap.data ?? 'Loading...',
+                style: const TextStyle(color: Colors.white60, fontSize: 11),
+              ),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child:
+                const Text('Close', style: TextStyle(color: Colors.white)),
+          ),
+        ],
       ),
     );
   }

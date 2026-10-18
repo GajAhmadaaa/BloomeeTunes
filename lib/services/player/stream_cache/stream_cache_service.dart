@@ -285,6 +285,22 @@ class StreamCacheService {
       _dir == null ? null : File('${_dir!.path}/cache-debug.log');
   static const _maxDebugLogBytes = 200 * 1024;
 
+  /// TEMPORARY (dev only): reads the internal proxy debug log.
+  Future<String> readDebugLog() async {
+    final f = _debugLogFile;
+    if (f == null) return '(log dir not ready)';
+    try {
+      if (!await f.exists()) return '(log empty)';
+      final lines = await f.readAsLines();
+      // Show most recent last, cap to last 100 lines for the viewer.
+      return lines.length > 100
+          ? lines.sublist(lines.length - 100).join('\n')
+          : lines.join('\n');
+    } catch (e) {
+      return '(read failed: $e)';
+    }
+  }
+
   Future<void> _debugLog(String msg) async {
     final f = _debugLogFile;
     if (f == null) return;
