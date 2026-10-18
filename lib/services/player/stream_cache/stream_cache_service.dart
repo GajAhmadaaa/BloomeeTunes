@@ -618,11 +618,8 @@ class StreamCacheService {
             // Fresh connection per chunk — don't reuse a pooled one the
             // server may have closed.
             clientReq.persistentConnection = false;
-            entry.headers.forEach((k, v) {
-              try {
-                clientReq.headers.set(k, v);
-              } catch (_) {}
-            });
+            // Minimal headers only: full plugin headers get 403 on chunk 2+.
+            _setMinimalHeaders(clientReq, entry.headers);
             clientReq.headers
                 .set(HttpHeaders.rangeHeader, 'bytes=$offset-$end');
             fetched = await clientReq.close();
@@ -780,6 +777,22 @@ class StreamCacheService {
 
   /// Parses the total length from a Content-Range header like
   /// "bytes 0-1048575/1234567". Returns null if unparseable.
+  /// Sets minimal headers for chunked upstream fetch: only User-Agent.
+  /// Full plugin headers trigger 403 on chunk 2+ (iOS CDN validates
+  /// request pattern strictly). The Range header is set separately per chunk.
+  void _setMinimalHeaders(
+      HttpClientRequest clientReq, Map<String, String> pluginHeaders) {
+    String? ua;
+    for (final e in pluginHeaders.entries) {
+      if (e.key.toLowerCase() == 'user-agent') {
+        ua = e.value;
+        break;
+      }
+    }
+    clientReq.headers.set(
+        HttpHeaders.userAgentHeader, ua ?? 'com.google.ios.youtube/20.10.4');
+  }
+
   int? _parseTotalLength(String? contentRange) {
     if (contentRange == null) return null;
     final slash = contentRange.lastIndexOf('/');
@@ -859,11 +872,8 @@ class StreamCacheService {
           try {
             final clientReq = await _client.getUrl(upstream);
             clientReq.persistentConnection = false;
-            entry.headers.forEach((k, v) {
-              try {
-                clientReq.headers.set(k, v);
-              } catch (_) {}
-            });
+            // Minimal headers only: full plugin headers get 403 on chunk 2+.
+            _setMinimalHeaders(clientReq, entry.headers);
             // Bounded chunk — iOS CDN rejects unbounded ranges.
             clientReq.headers.set(HttpHeaders.rangeHeader, 'bytes=$offset-$end');
             fetched = await clientReq.close();
