@@ -547,62 +547,13 @@ class StreamCacheService {
   /// The client's Range header is intentionally NOT forwarded upstream: a
   /// "bytes=0-" request is answered with a plain 200 + full body, which is
   /// legal HTTP and keeps the on-disk file a plain concatenation of bytes.
+  /// Fetches upstream in 1MB chunks using bounded Range requests.
+  /// iOS CDN URLs reject unbounded requests, so we must never fetch
+  /// without a Range end. The player still sees a normal 200 + full stream.
+  static const int _chunkSize = 1024 * 1024; // 1MB
+
   Future<bool> _teeFromStart(HttpRequest req, HttpResponse res, String key,
       _UpstreamEntry entry, Uri upstream, Directory dir) async {
-    late final HttpClientResponse upRes;
-    try {
-      final clientReq = await _client.getUrl(upstream);
-      entry.headers.forEach((k, v) {
-        try {
-          clientReq.headers.set(k, v);
-        } catch (_) {}
-      });
-      upRes = await clientReq.close();
-    } catch (e) {
-      log('Upstream fetch failed for ${entry.title}: $e', name: 'StreamCache');
-      unawaited(_debugLog('UPSTREAMFAIL key=$key title="${entry.title}" error="$e"'));
-      res.statusCode = HttpStatus.badGateway;
-      try {
-        await res.close();
-      } catch (_) {}
-      return false;
-    }
-
-    // Never cache encoded (e.g. gzipped) bodies — the on-disk file must be
-    // plain audio bytes.
-    final plain = upRes.headers.value(HttpHeaders.contentEncodingHeader) == null;
-    if (upRes.statusCode != HttpStatus.ok || !plain) {
-      // Error or encoded: stream straight through uncached.
-      res.statusCode = upRes.statusCode;
-      for (final h in [
-        HttpHeaders.contentTypeHeader,
-        HttpHeaders.contentLengthHeader,
-        HttpHeaders.acceptRangesHeader,
-        HttpHeaders.contentRangeHeader,
-        HttpHeaders.contentEncodingHeader,
-      ]) {
-        final v = upRes.headers.value(h);
-        if (v != null) res.headers.set(h, v);
-      }
-      try {
-        await res.addStream(upRes);
-        await res.close();
-      } catch (_) {
-        try {
-          await res.close();
-        } catch (_) {}
-      }
-      return false;
-    }
-
-    final contentType = upRes.headers.contentType?.mimeType;
-    res.statusCode = HttpStatus.ok;
-    res.headers.set(HttpHeaders.contentTypeHeader,
-        contentType ?? entry.contentType ?? 'audio/mpeg');
-    res.headers.set(HttpHeaders.acceptRangesHeader, 'bytes');
-    final upstreamLength = upRes.contentLength;
-    if (upstreamLength >= 0) res.contentLength = upstreamLength;
-
     final tmp = File('${dir.path}/$key.part');
     IOSink? sink;
     try {
@@ -614,38 +565,128 @@ class StreamCacheService {
       sink = null;
     }
     final teeWatch = Stopwatch()..start();
-    unawaited(_debugLog('TEESTART key=$key title="${entry.title}" '
-        'host=${upstream.host} declaredLen=$upstreamLength '
-        'playerRange=${req.headers.value(HttpHeaders.rangeHeader) ?? '-'}'));
     var bytes = 0;
     var guardTripped = false;
+    int? totalLength;
+    String? contentType;
+    bool headersSent = false;
+
+    void tripGuard() {
+      guardTripped = true;
+      try {
+        sink?.close();
+      } catch (_) {}
+      sink = null;
+      try {
+        if (tmp.existsSync()) tmp.deleteSync();
+      } catch (_) {}
+      unawaited(_debugLog('GUARDTRIPPED key=$key bytes=$bytes '
+          'cap=$_maxFileBytes title="${entry.title}"'));
+      log('Cache guard tripped for "${entry.title}" at ${_fmtBytes(bytes)} '
+          '(cap ${_fmtBytes(_maxFileBytes)}) — serving uncached',
+          name: 'StreamCache');
+    }
+
     try {
-      await for (final chunk in upRes) {
-        bytes += chunk.length;
-        res.add(chunk);
-        // Per-file guard: never trust the server's declared size — enforce
-        // our own cap on the ACTUAL bytes written. If tripped, stop writing
-        // to disk (delete the partial) but keep serving the player, so
-        // playback is unaffected; the song just won't be cached.
-        if (!guardTripped &&
-            _maxFileBytes > 0 &&
-            bytes > _maxFileBytes) {
-          guardTripped = true;
-          try {
-            await sink?.close();
-          } catch (_) {}
-          sink = null;
-          try {
-            if (await tmp.exists()) await tmp.delete();
-          } catch (_) {}
-          unawaited(_debugLog('GUARDTRIPPED key=$key bytes=$bytes '
-              'cap=$_maxFileBytes title="${entry.title}"'));
-          log('Cache guard tripped for "${entry.title}" at ${_fmtBytes(bytes)} '
-              '(cap ${_fmtBytes(_maxFileBytes)}) — serving uncached',
+      var offset = 0;
+      while (true) {
+        final end = offset + _chunkSize - 1;
+        late final HttpClientResponse upRes;
+        try {
+          final clientReq = await _client.getUrl(upstream);
+          entry.headers.forEach((k, v) {
+            try {
+              clientReq.headers.set(k, v);
+            } catch (_) {}
+          });
+          clientReq.headers
+              .set(HttpHeaders.rangeHeader, 'bytes=$offset-$end');
+          upRes = await clientReq.close();
+        } catch (e) {
+          log('Upstream fetch failed for ${entry.title}: $e',
               name: 'StreamCache');
+          unawaited(_debugLog(
+              'UPSTREAMFAIL key=$key title="${entry.title}" error="$e"'));
+          if (!headersSent) {
+            res.statusCode = HttpStatus.badGateway;
+            try {
+              await res.close();
+            } catch (_) {}
+          }
+          return false;
         }
-        if (!guardTripped) sink?.add(chunk);
+
+        // First chunk: learn total size and set up the player response.
+        if (!headersSent) {
+          final plain = upRes.headers.value(HttpHeaders.contentEncodingHeader) ==
+              null;
+          if (upRes.statusCode != HttpStatus.partialContent || !plain) {
+            // Error, encoded, or server ignored Range: stream straight
+            // through uncached (old fallback path).
+            res.statusCode = upRes.statusCode;
+            for (final h in [
+              HttpHeaders.contentTypeHeader,
+              HttpHeaders.contentLengthHeader,
+              HttpHeaders.acceptRangesHeader,
+              HttpHeaders.contentRangeHeader,
+              HttpHeaders.contentEncodingHeader,
+            ]) {
+              final v = upRes.headers.value(h);
+              if (v != null) res.headers.set(h, v);
+            }
+            try {
+              await res.addStream(upRes);
+              await res.close();
+            } catch (_) {
+              try {
+                await res.close();
+              } catch (_) {}
+            }
+            return false;
+          }
+          contentType = upRes.headers.contentType?.mimeType;
+          totalLength =
+              _parseTotalLength(upRes.headers.value(HttpHeaders.contentRangeHeader));
+          res.statusCode = HttpStatus.ok;
+          res.headers.set(HttpHeaders.contentTypeHeader,
+              contentType ?? entry.contentType ?? 'audio/mpeg');
+          res.headers.set(HttpHeaders.acceptRangesHeader, 'bytes');
+          if (totalLength != null && totalLength! >= 0) {
+            res.contentLength = totalLength!;
+          }
+          headersSent = true;
+          unawaited(_debugLog('TEESTART key=$key title="${entry.title}" '
+              'host=${upstream.host} declaredLen=$totalLength '
+              'playerRange=${req.headers.value(HttpHeaders.rangeHeader) ?? '-'} '
+              'chunked=1MB'));
+        } else if (upRes.statusCode != HttpStatus.partialContent) {
+          // Mid-stream error: stop, keep what we have.
+          break;
+        }
+
+        var chunkBytes = 0;
+        await for (final data in upRes) {
+          chunkBytes += data.length;
+          bytes += data.length;
+          res.add(data);
+          // Per-file guard: never trust the server's declared size — enforce
+          // our own cap on the ACTUAL bytes written. If tripped, stop writing
+          // to disk (delete the partial) but keep serving the player, so
+          // playback is unaffected; the song just won't be cached.
+          if (!guardTripped &&
+              _maxFileBytes > 0 &&
+              bytes > _maxFileBytes) {
+            tripGuard();
+          }
+          if (!guardTripped) sink?.add(data);
+        }
+
+        // Last chunk is smaller than requested, or we've reached the total.
+        if (chunkBytes < _chunkSize) break;
+        offset += chunkBytes;
+        if (totalLength != null && offset >= totalLength!) break;
       }
+
       try {
         await res.close();
       } catch (_) {}
@@ -653,12 +694,13 @@ class StreamCacheService {
         await sink?.flush();
         await sink?.close();
       } catch (_) {}
+      final declaredLen = totalLength ?? -1;
       if (bytes > 0 && !guardTripped) {
         if (_confirmedIds.contains(key)) {
           await _promotePart(key, entry, dir, bytes,
               contentType ?? entry.contentType ?? 'audio/mpeg');
           unawaited(_debugLog('TEEEND key=$key bytes=$bytes '
-              'declared=$upstreamLength elapsedMs=${teeWatch.elapsedMilliseconds} '
+              'declared=$declaredLen elapsedMs=${teeWatch.elapsedMilliseconds} '
               'result=promoted'));
         } else {
           // Tee finished but the track never started playing (it was only
@@ -668,7 +710,7 @@ class StreamCacheService {
           entry.contentType = contentType ?? entry.contentType;
           _pendingParts[key] = entry;
           unawaited(_debugLog('TEEEND key=$key bytes=$bytes '
-              'declared=$upstreamLength elapsedMs=${teeWatch.elapsedMilliseconds} '
+              'declared=$declaredLen elapsedMs=${teeWatch.elapsedMilliseconds} '
               'result=pending-playback'));
         }
         return true;
@@ -677,7 +719,7 @@ class StreamCacheService {
         if (await tmp.exists()) await tmp.delete();
       } catch (_) {}
       unawaited(_debugLog('TEEEND key=$key bytes=$bytes '
-          'declared=$upstreamLength elapsedMs=${teeWatch.elapsedMilliseconds} '
+          'declared=$declaredLen elapsedMs=${teeWatch.elapsedMilliseconds} '
           'result=${guardTripped ? 'guard-tripped' : 'empty'}'));
       return false;
     } catch (e) {
@@ -690,13 +732,22 @@ class StreamCacheService {
         await res.close();
       } catch (_) {}
       unawaited(_debugLog('TEEEND key=$key bytes=$bytes '
-          'declared=$upstreamLength elapsedMs=${teeWatch.elapsedMilliseconds} '
+          'declared=${totalLength ?? -1} elapsedMs=${teeWatch.elapsedMilliseconds} '
           'result=interrupted err=$e'));
       log('Tee interrupted for "${entry.title}" after ${_fmtBytes(bytes)}'
           ' — will resume in background',
           name: 'StreamCache');
       return false;
     }
+  }
+
+  /// Parses the total length from a Content-Range header like
+  /// "bytes 0-1048575/1234567". Returns null if unparseable.
+  int? _parseTotalLength(String? contentRange) {
+    if (contentRange == null) return null;
+    final slash = contentRange.lastIndexOf('/');
+    if (slash < 0) return null;
+    return int.tryParse(contentRange.substring(slash + 1).trim());
   }
 
   /// Moves `<key>.part` to `<key>.bin` and records it in the index.
@@ -757,76 +808,98 @@ class StreamCacheService {
       return;
     }
     if (have <= 0) return;
-    unawaited(
-        _debugLog('RESUMESTART key=$key have=$have title="${entry.title}"'));
+    unawaited(_debugLog(
+        'RESUMESTART key=$key have=$have title="${entry.title}" chunked=1MB'));
+    final sink = part.openWrite(mode: FileMode.append);
+    var bytes = have;
+    var offset = have;
     try {
-      final clientReq = await _client.getUrl(upstream);
-      entry.headers.forEach((k, v) {
+      while (true) {
+        final end = offset + _chunkSize - 1;
+        late final HttpClientResponse upRes;
         try {
-          clientReq.headers.set(k, v);
-        } catch (_) {}
-      });
-      clientReq.headers.set(HttpHeaders.rangeHeader, 'bytes=$have-');
-      final upRes = await clientReq.close();
-      if (upRes.statusCode != HttpStatus.partialContent) {
-        // Can't resume (expired URL, server refused Range, ...): drop the
-        // partial; the next play retries from scratch.
-        unawaited(_debugLog(
-            'RESUMEEND key=$key have=$have status=${upRes.statusCode} result=dropped'));
-        try {
-          await part.delete();
-        } catch (_) {}
-        return;
-      }
-      final sink = part.openWrite(mode: FileMode.append);
-      var bytes = have;
-      try {
-        await for (final chunk in upRes) {
-          bytes += chunk.length;
-          if (_maxFileBytes > 0 && bytes > _maxFileBytes) {
-            // Per-file guard tripped during resume: give up, delete partial.
+          final clientReq = await _client.getUrl(upstream);
+          entry.headers.forEach((k, v) {
             try {
-              await sink.close();
+              clientReq.headers.set(k, v);
             } catch (_) {}
-            try {
-              if (await part.exists()) await part.delete();
-            } catch (_) {}
-            unawaited(_debugLog('GUARDTRIPPED key=$key bytes=$bytes '
-                'cap=$_maxFileBytes title="${entry.title}" (resume)'));
-            log('Cache guard tripped for "${entry.title}" during resume at '
-                '${_fmtBytes(bytes)} — partial deleted',
-                name: 'StreamCache');
-            return;
-          }
-          sink.add(chunk);
+          });
+          // Bounded chunk — iOS CDN rejects unbounded ranges.
+          clientReq.headers.set(HttpHeaders.rangeHeader, 'bytes=$offset-$end');
+          upRes = await clientReq.close();
+        } catch (_) {
+          // Network hiccup: leave the .part for a later attempt.
+          try {
+            await sink.close();
+          } catch (_) {}
+          return;
         }
-        await sink.flush();
-        await sink.close();
-      } catch (_) {
+        if (upRes.statusCode != HttpStatus.partialContent) {
+          // Can't resume (expired URL, server refused Range, ...): drop the
+          // partial; the next play retries from scratch.
+          unawaited(_debugLog(
+              'RESUMEEND key=$key have=$have status=${upRes.statusCode} result=dropped'));
+          try {
+            await sink.close();
+          } catch (_) {}
+          try {
+            await part.delete();
+          } catch (_) {}
+          return;
+        }
+        var chunkBytes = 0;
         try {
-          await sink.close();
-        } catch (_) {}
-        return; // keep partial for a later attempt
+          await for (final chunk in upRes) {
+            chunkBytes += chunk.length;
+            bytes += chunk.length;
+            if (_maxFileBytes > 0 && bytes > _maxFileBytes) {
+              // Per-file guard tripped during resume: give up, delete partial.
+              try {
+                await sink.close();
+              } catch (_) {}
+              try {
+                if (await part.exists()) await part.delete();
+              } catch (_) {}
+              unawaited(_debugLog('GUARDTRIPPED key=$key bytes=$bytes '
+                  'cap=$_maxFileBytes title="${entry.title}" (resume)'));
+              log('Cache guard tripped for "${entry.title}" during resume at '
+                  '${_fmtBytes(bytes)} — partial deleted',
+                  name: 'StreamCache');
+              return;
+            }
+            sink.add(chunk);
+          }
+        } catch (_) {
+          try {
+            await sink.close();
+          } catch (_) {}
+          return; // keep partial for a later attempt
+        }
+        if (chunkBytes < _chunkSize) break; // last chunk
+        offset += chunkBytes;
       }
-      final contentType = upRes.headers.contentType?.mimeType ??
-          entry.contentType ??
-          'audio/mpeg';
-      if (_confirmedIds.contains(key)) {
-        await _promotePart(key, entry, dir, bytes, contentType);
-        unawaited(_debugLog(
-            'RESUMEEND key=$key have=$have bytes=$bytes status=206 result=promoted'));
-        log('Resumed + cached "${entry.title}" (${_fmtBytes(bytes)})',
-            name: 'StreamCache');
-      } else {
-        // Resume finished but the track never started playing — hold as
-        // pending, same as the from-start path.
-        entry.contentType = contentType;
-        _pendingParts[key] = entry;
-        unawaited(_debugLog(
-            'RESUMEEND key=$key have=$have bytes=$bytes status=206 result=pending-playback'));
-      }
+      await sink.flush();
+      await sink.close();
     } catch (_) {
-      // Network hiccup: leave the .part for a later attempt.
+      try {
+        await sink.close();
+      } catch (_) {}
+      return; // keep partial for a later attempt
+    }
+    final contentType = entry.contentType ?? 'audio/mpeg';
+    if (_confirmedIds.contains(key)) {
+      await _promotePart(key, entry, dir, bytes, contentType);
+      unawaited(_debugLog(
+          'RESUMEEND key=$key have=$have bytes=$bytes status=206 result=promoted'));
+      log('Resumed + cached "${entry.title}" (${_fmtBytes(bytes)})',
+          name: 'StreamCache');
+    } else {
+      // Resume finished but the track never started playing — hold as
+      // pending, same as the from-start path.
+      entry.contentType = contentType;
+      _pendingParts[key] = entry;
+      unawaited(_debugLog(
+          'RESUMEEND key=$key have=$have bytes=$bytes status=206 result=pending-playback'));
     }
   }
 
