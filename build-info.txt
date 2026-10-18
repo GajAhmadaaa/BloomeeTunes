@@ -1,10 +1,10 @@
 build-tools: /usr/local/lib/android/sdk/build-tools/37.0.0
-17e016e7b4ef4f6c5177689b93afc9ac5ccdf21e8c26585088a268d66f858c31  build/app/outputs/flutter-apk/app-release.apk
+1865227bbb9f7e1489394dc61d9be2139246130f75056cf6c63f99e7f4f9428b  build/app/outputs/flutter-apk/app-release.apk
 V2 Signer: certificate DN: C=US, O=Android, CN=Android Debug
-V2 Signer: certificate SHA-256 digest: 6c48466112e11c5dc94c65af442a7723e4ec1e61e261abab40b4cd67ad603503
-V2 Signer: certificate SHA-1 digest: 68df2889a9a8a19789f9dd8f2792ad827fa408dd
-V2 Signer: certificate MD5 digest: 8a922ed49c96d1806eac605f98d7d673
-package: name='ls.bloomee.musicplayer' versionCode='17' versionName='3.0.4' platformBuildVersionName='16' platformBuildVersionCode='36' compileSdkVersion='36' compileSdkVersionCodename='16'
+V2 Signer: certificate SHA-256 digest: 228d3900c1959bb78cd96ae1ed241a1e78635aec8425141e4ab221c3f4271c11
+V2 Signer: certificate SHA-1 digest: f496fd0728f77d8195caef779a91940e83d73cd6
+V2 Signer: certificate MD5 digest: b0649fa8e7ecaf4b111e443cc886f1c3
+package: name='ls.bloomee.musicplayer' versionCode='19' versionName='3.0.4' platformBuildVersionName='16' platformBuildVersionCode='36' compileSdkVersion='36' compileSdkVersionCodename='16'
 sdkVersion:'24'
 targetSdkVersion:'36'
-run: 17  sha: 92d3203b4b35972ecf7c7782bb27dca17c0e18f7
+run: 19  sha: ffcc1b7f8eddd92fe325c26006eb8eecc31a662b
