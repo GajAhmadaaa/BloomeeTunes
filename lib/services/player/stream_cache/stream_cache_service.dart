@@ -298,24 +298,6 @@ class StreamCacheService {
     } catch (_) {}
   }
 
-  /// Reads the debug log (newest last). Empty string when nothing logged yet.
-  Future<String> readDebugLog() async {
-    try {
-      final f = _debugLogFile;
-      if (f == null || !await f.exists()) return '';
-      return await f.readAsString();
-    } catch (_) {
-      return '';
-    }
-  }
-
-  Future<void> clearDebugLog() async {
-    try {
-      final f = _debugLogFile;
-      if (f != null && await f.exists()) await f.delete();
-    } catch (_) {}
-  }
-
   /// Deletes a single cached song by its cache key. Returns true if something
   /// was deleted.
   Future<bool> deleteEntry(String key) async {

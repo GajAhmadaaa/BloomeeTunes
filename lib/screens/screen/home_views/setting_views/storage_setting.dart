@@ -943,12 +943,6 @@ class _CacheContentsSheetState extends State<_CacheContentsSheet> {
                         fontWeight: FontWeight.bold),
                   ),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.bug_report_outlined,
-                      color: Colors.white70),
-                  tooltip: 'Cache debug log',
-                  onPressed: () => _showDebugLog(context),
-                ),
               ],
             ),
             const SizedBox(height: 4),
@@ -1035,46 +1029,6 @@ class _CacheContentsSheetState extends State<_CacheContentsSheet> {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  void _showDebugLog(BuildContext context) async {
-    final logText = await StreamCacheService.instance.readDebugLog();
-    if (!context.mounted) return;
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1B1B1B),
-        title: const Text(
-          'Cache debug log',
-          style: TextStyle(color: Colors.white, fontSize: 16),
-        ),
-        content: SizedBox(
-          width: double.maxFinite,
-          height: 400,
-          child: SingleChildScrollView(
-            child: SelectableText(
-              logText.isEmpty ? 'No log entries yet.' : logText,
-              style: const TextStyle(color: Colors.white60, fontSize: 11),
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () async {
-              await StreamCacheService.instance.clearDebugLog();
-              if (ctx.mounted) Navigator.of(ctx).pop();
-            },
-            child: const Text('Clear log',
-                style: TextStyle(color: Colors.redAccent)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child:
-                const Text('Close', style: TextStyle(color: Colors.white)),
-          ),
-        ],
       ),
     );
   }
