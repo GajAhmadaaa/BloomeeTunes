@@ -57,6 +57,9 @@ jobs:
         run: |
           VERSION="$(grep '^version:' pubspec.yaml | sed 's/^version: //' | cut -d'+' -f1)"
           TAG="v${VERSION}+${{ github.run_number }}"
+          if [ "${{ github.ref_name }}" != "main" ]; then
+            TAG="${TAG}-dev"
+          fi
           APK_NAME="bloomee-fork-android-${TAG}.apk"
           gh release create "$TAG" "build/app/outputs/flutter-apk/app-release.apk#${APK_NAME}" \
             --title "Bloomee fork $TAG" \

@@ -1,4 +1,4 @@
-package ls.bloomee.musicplayer
+package com.trumtify.musicplayer
 
 import io.flutter.embedding.android.FlutterActivity
 

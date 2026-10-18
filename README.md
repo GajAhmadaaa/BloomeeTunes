@@ -1,6 +1,12 @@
-<div align="center">
+# 🎵 Trumtify
 
-<img src="./assets/docs/bloomeetunes_new_banner.png" alt="BloomeeTunes Banner" width="100%">
+> **Trumtify** is a rebranded fork of [BloomeeTunes](https://github.com/HemantKArya/BloomeeTunes)
+> (GPL v2), maintained at this repository. Changes on top of upstream include:
+> - Automatic stream caching (saves mobile data, offline playback)
+> - Wi-Fi / mobile-data split streaming quality + audio-only toggle
+> - Custom tweaks and experiments (see commit history)
+
+---
 
 # 🌸 Bloomee 
 
