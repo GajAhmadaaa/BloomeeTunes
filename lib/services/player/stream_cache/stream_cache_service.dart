@@ -693,6 +693,9 @@ class StreamCacheService {
               'chunked=1MB'));
         } else if (upRes.statusCode != HttpStatus.partialContent) {
           // Mid-stream error: stop, keep what we have.
+          unawaited(_debugLog('CHUNKBREAK key=$key offset=$offset '
+              'status=${upRes.statusCode} '
+              'contentRange=${upRes.headers.value(HttpHeaders.contentRangeHeader) ?? '-'}'));
           break;
         }
 
