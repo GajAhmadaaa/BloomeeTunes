@@ -64,6 +64,36 @@ class PluginBootstrapService {
 
   static const Duration syncGap = Duration(minutes: 30);
 
+  // Fork override: ytmusic plugin with IOS-first stream strategy (v6),
+  // hosted on our own releases. Replaces the upstream v5 from bloom-factory.
+  static const String _ytMusicPluginId =
+      'content-resolver.bloomfactory.ytmusic';
+  static const String _forkYtMusicDownloadUrl =
+      'https://github.com/GajAhmadaaa/BloomeeTunes/releases/download/plugins-v1/ytmusic.bex';
+  static const String _forkYtMusicVersion = '6';
+
+  /// Redirects the ytmusic plugin entry to our forked build.
+  /// RemotePluginModel is immutable, so a new instance is returned.
+  static RemotePluginModel _applyForkOverride(RemotePluginModel plugin) {
+    if (plugin.id != _ytMusicPluginId) return plugin;
+    log('Using forked ytmusic plugin v$_forkYtMusicVersion',
+        name: 'PluginBootstrap');
+    return RemotePluginModel(
+      assetName: plugin.assetName,
+      description: plugin.description,
+      id: plugin.id,
+      name: plugin.name,
+      manifestVersion: plugin.manifestVersion,
+      type: plugin.type,
+      version: _forkYtMusicVersion,
+      downloadUrl: _forkYtMusicDownloadUrl,
+      thumbnailUrl: plugin.thumbnailUrl,
+      publisherName: plugin.publisherName,
+      countryAllowlist: plugin.countryAllowlist,
+      lastUpdated: plugin.lastUpdated,
+    );
+  }
+
   static bool _bootstrapDone = false;
 
   static bool get bootstrapDone => _bootstrapDone;
@@ -165,7 +195,8 @@ class PluginBootstrapService {
     var processedPlugins = 0;
 
     for (final repo in installRepos) {
-      for (final plugin in repo.plugins) {
+      for (final upstream in repo.plugins) {
+        final plugin = _applyForkOverride(upstream);
         onProgress(PluginBootstrapProgress(40 +
             ((processedPlugins * 55) ~/
                 (totalPlugins == 0 ? 1 : totalPlugins))));
@@ -406,7 +437,8 @@ class PluginBootstrapService {
 
       final remoteLatestById = <String, RemotePluginModel>{};
       for (final repo in repos) {
-        for (final remote in repo.plugins) {
+        for (final upstream in repo.plugins) {
+          final remote = _applyForkOverride(upstream);
           if (!_isRemoteManifestCompatible(remote)) {
             continue;
           }
