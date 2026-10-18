@@ -615,9 +615,8 @@ class StreamCacheService {
         for (var attempt = 0; attempt < 2 && fetched == null; attempt++) {
           try {
             final clientReq = await _client.getUrl(upstream);
-            // Fresh connection per chunk — don't reuse a pooled one the
-            // server may have closed.
-            clientReq.persistentConnection = false;
+            // Keep-alive: reuse connection for speed — iOS CDN has a tight
+            // time window for sequential chunk requests.
             // Minimal headers only: full plugin headers get 403 on chunk 2+.
             _setMinimalHeaders(clientReq, entry.headers);
             clientReq.headers
@@ -871,7 +870,7 @@ class StreamCacheService {
         for (var attempt = 0; attempt < 2 && fetched == null; attempt++) {
           try {
             final clientReq = await _client.getUrl(upstream);
-            clientReq.persistentConnection = false;
+            // Keep-alive for speed (tight time window for sequential chunks).
             // Minimal headers only: full plugin headers get 403 on chunk 2+.
             _setMinimalHeaders(clientReq, entry.headers);
             // Bounded chunk — iOS CDN rejects unbounded ranges.
