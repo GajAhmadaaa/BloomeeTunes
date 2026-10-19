@@ -76,6 +76,11 @@ class PlayerSettings extends StatelessWidget {
                       l10n.playerSettingQualityMedium,
                       l10n.playerSettingQualityHigh,
                     ],
+                    // DEV: ANDROID plugin only provides low quality (itag 18).
+                    disabledOptions: {
+                      l10n.playerSettingQualityMedium,
+                      l10n.playerSettingQualityHigh,
+                    },
                     selected: state.strmQualityWifi,
                     onSelected: (v) => context
                         .read<SettingsCubit>()
@@ -92,6 +97,11 @@ class PlayerSettings extends StatelessWidget {
                       l10n.playerSettingQualityMedium,
                       l10n.playerSettingQualityHigh,
                     ],
+                    // DEV: ANDROID plugin only provides low quality (itag 18).
+                    disabledOptions: {
+                      l10n.playerSettingQualityMedium,
+                      l10n.playerSettingQualityHigh,
+                    },
                     selected: state.strmQualityMobile,
                     onSelected: (v) => context
                         .read<SettingsCubit>()
