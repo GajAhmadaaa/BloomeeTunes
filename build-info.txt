@@ -1,10 +1,10 @@
 build-tools: /usr/local/lib/android/sdk/build-tools/37.0.0
-934c863c13b73de30e08be746f8d712b3466333a5ad8bf02d19476af61b8fd95  build/app/outputs/flutter-apk/app-release.apk
+b21ef961124f3a3524193cc8c527f0ffebcc68c53397379b5260abfb6be22aac  build/app/outputs/flutter-apk/app-release.apk
 V2 Signer: certificate DN: C=US, O=Android, CN=Android Debug
-V2 Signer: certificate SHA-256 digest: 87ede01fc3610f8a1b7dfb7d94ce813513cc7e8346d2e41f8c0e8f9b36d4427b
-V2 Signer: certificate SHA-1 digest: a5f4460fb9857cecf4b97146a430ae062be7d832
-V2 Signer: certificate MD5 digest: 9055d388c28b6ae7752b59cecf348f75
-package: name='com.trumtify.musicplayer' versionCode='25' versionName='3.0.4' platformBuildVersionName='16' platformBuildVersionCode='36' compileSdkVersion='36' compileSdkVersionCodename='16'
+V2 Signer: certificate SHA-256 digest: ce87e1d1e35acacf3fc789f58b548170a805c7187df90c59fb8e262d0130a41c
+V2 Signer: certificate SHA-1 digest: 94b65f03b532bc1399f66e3fcc6aeb5d951e7ee3
+V2 Signer: certificate MD5 digest: 4748cc0bbada8615531c504d1148e1e8
+package: name='com.trumtify.musicplayer' versionCode='26' versionName='3.0.4' platformBuildVersionName='16' platformBuildVersionCode='36' compileSdkVersion='36' compileSdkVersionCodename='16'
 sdkVersion:'24'
 targetSdkVersion:'36'
-run: 25  sha: 41ddcde117c927f113747293f25f39283cf8e281
+run: 26  sha: b91dd6ab8e4b3420c0fb32aa779193736a0587c9
