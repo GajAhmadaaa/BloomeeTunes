@@ -190,13 +190,13 @@ class SettingsCubit extends Cubit<SettingsState> {
       // [30] strmQualityWifi
       _readSetting(
         () => _settingsRepo.getSettingStr(SettingKeys.strmQualityWifi,
-            defaultValue: 'High'),
+            defaultValue: 'Low'),
         SettingKeys.strmQualityWifi,
       ),
       // [31] strmQualityMobile
       _readSetting(
         () => _settingsRepo.getSettingStr(SettingKeys.strmQualityMobile,
-            defaultValue: 'Medium'),
+            defaultValue: 'Low'),
         SettingKeys.strmQualityMobile,
       ),
       // [32] streamAudioOnly
