@@ -280,7 +280,7 @@ class About extends StatelessWidget {
               borderRadius: BorderRadius.circular(32.0),
               onTap: () {
                 launchUrl(
-                  Uri.parse("https://hemantkarya.github.io/BloomeeTunes/"),
+                  Uri.parse("https://github.com/GajAhmadaaa/BloomeeTunes"),
                   mode: LaunchMode.externalApplication,
                 );
               },
@@ -337,7 +337,7 @@ class About extends StatelessWidget {
               borderRadius: BorderRadius.circular(8),
               onTap: () {
                 launchUrl(
-                    Uri.parse("https://hemantkarya.github.io/BloomeeTunes/"),
+                    Uri.parse("https://github.com/GajAhmadaaa/BloomeeTunes"),
                     mode: LaunchMode.externalApplication);
               },
               child: Row(
