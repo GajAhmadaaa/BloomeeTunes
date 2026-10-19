@@ -222,7 +222,7 @@ class _SpinnerBody extends StatelessWidget {
           ),
           const SizedBox(height: 32),
           Text(
-            l10n?.pluginBootstrapTitle ?? 'Setting up Bloomee',
+            l10n?.pluginBootstrapTitle ?? 'Setting up Trumtify',
             textAlign: TextAlign.center,
             style: const TextStyle(
               color: Colors.white,

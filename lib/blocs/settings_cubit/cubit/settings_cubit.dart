@@ -318,8 +318,8 @@ class SettingsCubit extends Cubit<SettingsState> {
       streamCacheEnabled: (results[27] as bool?) ?? true,
       streamCacheCapMB: (results[28] as String?) ?? '2048',
       streamCacheMaxFileMB: (results[29] as String?) ?? '256',
-      strmQualityWifi: (results[30] as String?) ?? 'High',
-      strmQualityMobile: (results[31] as String?) ?? 'Medium',
+      strmQualityWifi: (results[30] as String?) ?? 'Low',
+      strmQualityMobile: (results[31] as String?) ?? 'Low',
       streamAudioOnly: (results[32] as bool?) ?? false,
     ));
   }
