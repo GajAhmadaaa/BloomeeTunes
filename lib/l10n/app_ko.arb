@@ -388,7 +388,7 @@
   "updateViewPreRelease": "최신 프리릴리즈 확인",
   "updateCurrentVersion": "현재 버전: {curr} + {build}",
   "@updateCurrentVersion": { "placeholders": { "curr": { "type": "String" }, "build": { "type": "String" } } },
-  "updateNewVersionAvailable": "새로운 버전의 Trumtify🌸가 출시되었습니다!",
+  "updateNewVersionAvailable": "새로운 버전의 Trumtify♥️가 출시되었습니다!",
   "updateVersion": "버전: {ver}+{build}",
   "@updateVersion": { "placeholders": { "ver": { "type": "String" }, "build": { "type": "String" } } },
   "updateDownloadNow": "지금 다운로드",
@@ -704,7 +704,7 @@
 
   "snackbarOpeningAlbumPage": "원본 앨범 페이지를 엽니다.",
 
-  "updateAvailableBody": "새로운 버전의 Trumtify🌸가 출시되었습니다!\n\n버전: {ver}+{build}",
+  "updateAvailableBody": "새로운 버전의 Trumtify♥️가 출시되었습니다!\n\n버전: {ver}+{build}",
   "@updateAvailableBody": { "placeholders": { "ver": { "type": "String" }, "build": { "type": "String" } } },
 
   "pluginSnackbarInstalled": "플러그인 \"{id}\" 설치됨",

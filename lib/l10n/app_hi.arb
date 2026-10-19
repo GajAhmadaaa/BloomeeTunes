@@ -384,11 +384,11 @@
   "updateAutoNotify": "ऑटो अपडेट सूचना",
   "updateAutoNotifySubtitle": "ऐप खोलते ही नया अपडेट उपलब्ध होने पर जानकारी पाएँ।",
   "updateCheckTitle": "अपडेट्स चेक करें",
-  "updateUpToDate": "Trumtify🌸 पूरी तरह से अपडेटेड है!",
+  "updateUpToDate": "Trumtify♥️ पूरी तरह से अपडेटेड है!",
   "updateViewPreRelease": "नया प्री-रिलीज़ वर्शन देखें",
   "updateCurrentVersion": "वर्तमान वर्शन: {curr} + {build}",
   "@updateCurrentVersion": { "placeholders": { "curr": { "type": "String" }, "build": { "type": "String" } } },
-  "updateNewVersionAvailable": "Trumtify🌸 का एक नया वर्शन उपलब्ध है!",
+  "updateNewVersionAvailable": "Trumtify♥️ का एक नया वर्शन उपलब्ध है!",
   "updateVersion": "वर्शन: {ver}+{build}",
   "@updateVersion": { "placeholders": { "ver": { "type": "String" }, "build": { "type": "String" } } },
   "updateDownloadNow": "अभी डाउनलोड करें",
@@ -704,7 +704,7 @@
 
   "snackbarOpeningAlbumPage": "मूल एल्बम का पेज खोला जा रहा है।",
 
-  "updateAvailableBody": "Trumtify🌸 का नया वर्शन आ गया है!\n\nवर्शन: {ver}+{build}",
+  "updateAvailableBody": "Trumtify♥️ का नया वर्शन आ गया है!\n\nवर्शन: {ver}+{build}",
   "@updateAvailableBody": { "placeholders": { "ver": { "type": "String" }, "build": { "type": "String" } } },
 
   "pluginSnackbarInstalled": "प्लगइन \"{id}\" सफलतापूर्वक इंस्टॉल हो गया",

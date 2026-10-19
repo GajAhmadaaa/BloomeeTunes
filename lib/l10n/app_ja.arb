@@ -384,11 +384,11 @@
   "updateAutoNotify": "アップデートの自動通知",
   "updateAutoNotifySubtitle": "新しいバージョンがある場合に通知します。",
   "updateCheckTitle": "更新の確認",
-  "updateUpToDate": "Trumtify🌸 は最新の状態です！",
+  "updateUpToDate": "Trumtify♥️ は最新の状態です！",
   "updateViewPreRelease": "最新のプレリリースを表示",
   "updateCurrentVersion": "現在のバージョン: {curr} + {build}",
   "@updateCurrentVersion": { "placeholders": { "curr": { "type": "String" }, "build": { "type": "String" } } },
-  "updateNewVersionAvailable": "Trumtify🌸 の新しいバージョンが利用可能です！",
+  "updateNewVersionAvailable": "Trumtify♥️ の新しいバージョンが利用可能です！",
   "updateVersion": "バージョン: {ver}+{build}",
   "@updateVersion": { "placeholders": { "ver": { "type": "String" }, "build": { "type": "String" } } },
   "updateDownloadNow": "今すぐダウンロード",
@@ -704,7 +704,7 @@
 
   "snackbarOpeningAlbumPage": "元のアルバムページを開きます。",
 
-  "updateAvailableBody": "Trumtify🌸 の新しいバージョンが利用可能です！\n\nバージョン: {ver}+{build}",
+  "updateAvailableBody": "Trumtify♥️ の新しいバージョンが利用可能です！\n\nバージョン: {ver}+{build}",
   "@updateAvailableBody": { "placeholders": { "ver": { "type": "String" }, "build": { "type": "String" } } },
 
   "pluginSnackbarInstalled": "プラグイン \"{id}\" をインストールしました",

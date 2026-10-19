@@ -384,11 +384,11 @@
   "updateAutoNotify": "自动更新通知",
   "updateAutoNotifySubtitle": "应用启动时如有新版本将收到通知。",
   "updateCheckTitle": "检查更新",
-  "updateUpToDate": "Trumtify🌸 已经是最新版本！",
+  "updateUpToDate": "Trumtify♥️ 已经是最新版本！",
   "updateViewPreRelease": "查看最新预发布版",
   "updateCurrentVersion": "当前版本: {curr} + {build}",
   "@updateCurrentVersion": { "placeholders": { "curr": { "type": "String" }, "build": { "type": "String" } } },
-  "updateNewVersionAvailable": "Trumtify🌸 新版本现已可用！",
+  "updateNewVersionAvailable": "Trumtify♥️ 新版本现已可用！",
   "updateVersion": "版本: {ver}+{build}",
   "@updateVersion": { "placeholders": { "ver": { "type": "String" }, "build": { "type": "String" } } },
   "updateDownloadNow": "立即下载",
@@ -704,7 +704,7 @@
 
   "snackbarOpeningAlbumPage": "正在打开原始专辑页面。",
 
-  "updateAvailableBody": "Trumtify🌸 新版本现已可用！\n\n版本：{ver}+{build}",
+  "updateAvailableBody": "Trumtify♥️ 新版本现已可用！\n\n版本：{ver}+{build}",
   "@updateAvailableBody": { "placeholders": { "ver": { "type": "String" }, "build": { "type": "String" } } },
 
   "pluginSnackbarInstalled": "插件 \"{id}\" 安装成功",

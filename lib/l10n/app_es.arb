@@ -384,11 +384,11 @@
   "updateAutoNotify": "Notificar actualizaciones",
   "updateAutoNotifySubtitle": "Avisar al abrir la app si hay una actualización disponible.",
   "updateCheckTitle": "Búsqueda de actualizaciones",
-  "updateUpToDate": "¡Trumtify🌸 está al día!",
+  "updateUpToDate": "¡Trumtify♥️ está al día!",
   "updateViewPreRelease": "Ver última Pre-Release",
   "updateCurrentVersion": "Versión actual: {curr} + {build}",
   "@updateCurrentVersion": { "placeholders": { "curr": { "type": "String" }, "build": { "type": "String" } } },
-  "updateNewVersionAvailable": "¡Hay una nueva versión de Trumtify🌸 disponible!",
+  "updateNewVersionAvailable": "¡Hay una nueva versión de Trumtify♥️ disponible!",
   "updateVersion": "Versión: {ver}+{build}",
   "@updateVersion": { "placeholders": { "ver": { "type": "String" }, "build": { "type": "String" } } },
   "updateDownloadNow": "Descargar ahora",
@@ -704,7 +704,7 @@
 
   "snackbarOpeningAlbumPage": "Abriendo página original del álbum.",
 
-  "updateAvailableBody": "¡Nueva versión de Trumtify🌸 disponible!\n\nVersión: {ver}+{build}",
+  "updateAvailableBody": "¡Nueva versión de Trumtify♥️ disponible!\n\nVersión: {ver}+{build}",
   "@updateAvailableBody": { "placeholders": { "ver": { "type": "String" }, "build": { "type": "String" } } },
 
   "pluginSnackbarInstalled": "Plugin \"{id}\" instalado con éxito",
