@@ -44,7 +44,7 @@ class CheckUpdateView extends StatelessWidget {
                       child: FilledButton(
                         onPressed: () {
                           launch_Url(Uri.parse(
-                              "https://github.com/HemantKArya/BloomeeTunes/releases"));
+                              "https://github.com/GajAhmadaaa/BloomeeTunes/releases"));
                         },
                         child: SizedBox(
                           // width: 150,
@@ -115,7 +115,7 @@ class CheckUpdateView extends StatelessWidget {
                       child: FilledButton(
                         onPressed: () {
                           launch_Url(
-                              Uri.parse("https://bloomee.sourceforge.io/"));
+                              Uri.parse("https://github.com/GajAhmadaaa/BloomeeTunes/releases"));
                         },
                         child: SizedBox(
                           width: 150,

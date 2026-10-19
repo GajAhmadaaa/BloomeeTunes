@@ -368,20 +368,23 @@ class SettingQualityChip extends StatelessWidget {
   final String label;
   final bool isSelected;
   final VoidCallback onTap;
+  final bool isEnabled;
 
   const SettingQualityChip({
     required this.label,
     required this.isSelected,
     required this.onTap,
+    this.isEnabled = true,
     super.key,
   });
 
   @override
   Widget build(BuildContext context) {
+    final enabled = isEnabled;
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: onTap,
+        onTap: enabled ? onTap : null,
         borderRadius: BorderRadius.circular(12),
         splashColor: Default_Theme.accentColor2.withValues(alpha: 0.1),
         highlightColor: Default_Theme.accentColor2.withValues(alpha: 0.05),
@@ -404,9 +407,11 @@ class SettingQualityChip extends StatelessWidget {
           child: Text(
             label,
             style: Default_Theme.secondoryTextStyleMedium.copyWith(
-              color: isSelected
-                  ? Default_Theme.accentColor2
-                  : Default_Theme.primaryColor2.withValues(alpha: 0.7),
+              color: enabled
+                  ? (isSelected
+                      ? Default_Theme.accentColor2
+                      : Default_Theme.primaryColor2.withValues(alpha: 0.7))
+                  : Default_Theme.primaryColor2.withValues(alpha: 0.25),
               fontSize: 13,
               fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
             ),
@@ -424,6 +429,7 @@ class SettingQualityChipRow extends StatelessWidget {
   final List<String> options;
   final String selected;
   final ValueChanged<String> onSelected;
+  final Set<String> disabledOptions;
 
   const SettingQualityChipRow({
     required this.icon,
@@ -432,6 +438,7 @@ class SettingQualityChipRow extends StatelessWidget {
     required this.options,
     required this.selected,
     required this.onSelected,
+    this.disabledOptions = const {},
     super.key,
   });
 
@@ -484,6 +491,7 @@ class SettingQualityChipRow extends StatelessWidget {
                 .map((opt) => SettingQualityChip(
                       label: opt,
                       isSelected: opt == selected,
+                      isEnabled: !disabledOptions.contains(opt),
                       onTap: () => onSelected(opt),
                     ))
                 .toList(),
