@@ -51,10 +51,22 @@ class _PlayerOverlayWrapperState extends State<PlayerOverlayWrapper>
       parent: _animationController,
       curve: Curves.easeOut,
     ));
+
+    // Report visual visibility (incl. mid-animation) to the back handler.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        context.read<PlayerOverlayCubit>().registerPlayerVisibilityCheck(
+              () => _animationController.value > 0,
+            );
+      }
+    });
   }
 
   @override
   void dispose() {
+    try {
+      context.read<PlayerOverlayCubit>().unregisterPlayerVisibilityCheck();
+    } catch (_) {}
     _animationController.dispose();
     super.dispose();
   }

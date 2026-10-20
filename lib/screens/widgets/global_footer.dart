@@ -48,7 +48,9 @@ class GlobalFooter extends StatelessWidget {
           }
 
           // ③ Hide the player overlay.
-          if (overlayC.state) {
+          // Use visual visibility (incl. close animation) so a back press
+          // during the animation is swallowed instead of exiting the app.
+          if (overlayC.isPlayerVisuallyVisible()) {
             overlayC.hidePlayer();
             return true;
           }
@@ -116,8 +118,9 @@ class GlobalFooter extends StatelessWidget {
     // ② Collapse UpNext panel
     if (overlayC.state && overlayC.collapseUpNextPanel()) return;
 
-    // ③ Hide player
-    if (overlayC.state) {
+    // ③ Hide player (visual visibility covers the close animation,
+    // so a back press mid-animation doesn't fall through to exit)
+    if (overlayC.isPlayerVisuallyVisible()) {
       overlayC.hidePlayer();
       return;
     }
