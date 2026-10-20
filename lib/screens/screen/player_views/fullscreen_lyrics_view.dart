@@ -28,6 +28,7 @@ class FullscreenLyricsView extends StatefulWidget {
 
 class _FullscreenLyricsViewState extends State<FullscreenLyricsView> {
   bool _showControls = true;
+  bool _isImmersive = true;
   Timer? _hideControlsTimer;
   final UpNextPanelController _upNextPanelController = UpNextPanelController();
 
@@ -49,6 +50,15 @@ class _FullscreenLyricsViewState extends State<FullscreenLyricsView> {
     _currentTrackId = playerCubit.bloomeePlayer.currentTrackInfo.id;
 
     _loadPersistedOffset();
+  }
+
+  void _toggleImmersive() {
+    setState(() {
+      _isImmersive = !_isImmersive;
+      SystemChrome.setEnabledSystemUIMode(
+        _isImmersive ? SystemUiMode.immersiveSticky : SystemUiMode.edgeToEdge,
+      );
+    });
   }
 
   void _loadPersistedOffset() {
@@ -359,6 +369,16 @@ class _FullscreenLyricsViewState extends State<FullscreenLyricsView> {
                 ),
               ),
               const SizedBox(width: 16),
+              IconButton(
+                onPressed: _toggleImmersive,
+                icon: Icon(
+                    _isImmersive
+                        ? Icons.fullscreen_exit_rounded
+                        : Icons.fullscreen_rounded,
+                    color: Colors.white,
+                    size: 28),
+                tooltip: _isImmersive ? 'Exit immersive' : 'Immersive mode',
+              ),
               BlocBuilder<LyricsCubit, LyricsState>(
                 builder: (context, state) {
                   return IconButton(
